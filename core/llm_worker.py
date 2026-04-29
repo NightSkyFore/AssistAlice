@@ -21,5 +21,5 @@ class LLMWorker(QThread):
             self.finished_signal.emit(reply_text)
         except Exception as e:
             error_msg = f"{str(e)}\n{traceback.format_exc()}"
-            print(f"[LLMWroker] {error_msg}")
+            print(f"[LLMWorker] {error_msg}")
             self.error_signal.emit(str(e))

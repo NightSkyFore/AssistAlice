@@ -8,6 +8,7 @@ from core.alice_ai import AliceAI
 from core.dialog_manager import DialogManager
 from core.llm_worker import LLMWorker
 from core.summary_worker import SummaryWorker
+from core.stt_worker import WhisperSTTWorker
 from .pet_widget import DesktopPet
 from .tray_icon import TrayIcon
 import sys
@@ -23,6 +24,8 @@ class MainWindow(QMainWindow):
         self.pet.hide()
 
         self._actually_quit = False
+        self._llm_busy = False
+        self._draft_buffer = ""
 
         self.tray = TrayIcon(self)
         self.tray.show()
@@ -55,7 +58,7 @@ class MainWindow(QMainWindow):
         
         self.viewer = AiViewer()
         
-        self.mic_btn = QPushButton("🎤 Microphone Closed")
+        self.mic_btn = QPushButton("🎙️ Microphone Closed")
         self.mic_btn.setCheckable(True)
         self.mic_btn.setFixedHeight(45)
         self.mic_btn.setStyleSheet("""
@@ -70,6 +73,8 @@ class MainWindow(QMainWindow):
                 color: white;
             }
         """)
+        self.mic_btn.clicked.connect(self.toggle_microphone)
+
         button_layout = QVBoxLayout()
         button_layout.setContentsMargins(0, 0, 0, 7.5)
         button_layout.addWidget(self.mic_btn)
@@ -137,6 +142,43 @@ class MainWindow(QMainWindow):
         layout.addLayout(left_layout, 1)
         layout.addLayout(right_layout, 2)
     
+    # microphone event
+    def toggle_microphone(self, checked):
+        if checked:
+            self.mic_btn.setText("🔴 Listening...")
+            self.start_stt()
+        else:
+            self.mic_btn.setText("🎙️ Microphone Closed")
+            self.stop_stt()
+    
+    def start_stt(self):
+        self.stt_worker = WhisperSTTWorker()
+        self.stt_worker.text_signal.connect(self.on_voice_input)
+        self.stt_worker.silence_duration_signal.connect(self.handle_silence)
+        self.stt_worker.start()
+
+    def stop_stt(self):
+        if self.stt_worker:
+            self.stt_worker.stop()
+            self.stt_worker = None
+
+    def on_voice_input(self, text):
+        self._draft_buffer += text
+        self.input_edit.setPlainText(self._draft_buffer)
+
+    def handle_silence(self, time_duration):
+        if not self._draft_buffer.strip() or time_duration < 3.0:
+            return
+
+        # when llm is busy, keep recording
+        if self._llm_busy:
+            return
+        
+        final_text = self._draft_buffer
+        self._draft_buffer = "" 
+        self.handle_send(final_text)
+
+    # llm chat event
     def trigger_send_from_button(self):
         text = self.input_edit.toPlainText().strip()
         if text:
@@ -209,9 +251,11 @@ class MainWindow(QMainWindow):
         self.summary_worker = None
 
     def set_ui_busy(self, busy: bool):
+        self._llm_busy = busy
         self.input_edit.setEnabled(not busy)
         self.send_btn.setEnabled(not busy)
-   
+
+    # window action
     def closeEvent(self, e):
         if not self._actually_quit:
             self.show_pet_mode()

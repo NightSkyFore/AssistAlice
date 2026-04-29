@@ -19,5 +19,5 @@ class SummaryWorker(QThread):
             self.summary_finished.emit(new_summary)
         except Exception as e:
             error_msg = f"{str(e)}\n{traceback.format_exc()}"
-            print(f"[SummaryWroker] {error_msg}")
+            print(f"[SummaryWorker] {error_msg}")
             self.error_signal.emit(str(e))
