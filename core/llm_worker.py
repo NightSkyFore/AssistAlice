@@ -5,7 +5,9 @@ from PySide6.QtCore import QThread, Signal
 from core.alice_ai import AliceAI
 
 class LLMWorker(QThread):
-    # 定义两个信号：一个用于返回最终结果，一个用于发生错误时报错
+    # word for ui, and sentence for tts
+    word_signal = Signal(str)
+    sentence_signal = Signal(str)
     finished_signal = Signal(str)
     error_signal = Signal(str)
 
@@ -14,12 +16,104 @@ class LLMWorker(QThread):
         self.llm = llm_instance
         self.messages = messages
 
+        # 断句
+        self.safe_punctuations = set("，。！？；\n!?;")
+        self.unsafe_punctuations = set(",.")
+
     def run(self):
-        """异步执行，避免卡界面"""
+        tts_buffer = ""
+        full_response = ""
+        # 状态机：非代码块状态/代码块状态（跳过）
+        is_inside_code = False
+
         try:
-            reply_text = self.llm.get_response(self.messages)
-            self.finished_signal.emit(reply_text)
+            for token in self.llm.generate_stream_response(self.messages):
+                # send to ui update 
+                self.word_signal.emit(token)
+                full_response += token
+
+                # processing for tts sentence 
+                tts_buffer += token
+
+                # detecting code block 
+                if "```" in tts_buffer:
+                    parts = tts_buffer.split("```", 1)
+                    before_code = parts[0]
+                    rest = parts[1]
+
+                    if not is_inside_code:
+                        # 状态流转：外部 -> 内部 (刚进入代码块)
+                        # 把进入代码块之前的正常文本，强制推给 TTS 断句并朗读
+                        self.flush_buffer_to_tts(before_code, force_flush=True)
+
+                    # 切换状态，并将剩余部分放回 buffer
+                    is_inside_code = not is_inside_code
+                    tts_buffer = rest
+
+                if not is_inside_code:
+                    sentences, remaining = self.process_buffer(tts_buffer)
+                    for sentence in sentences:
+                        self.emit_clean_sentence(sentence)
+                    tts_buffer = remaining
+                else:
+                    # 代码块内，除了反引号（为了凑出下一个 ```），其它内容全丢弃
+                    if tts_buffer.endswith("``"):
+                        tts_buffer = "``"
+                    elif tts_buffer.endswith("`"):
+                        tts_buffer = "`"
+                    else:
+                        tts_buffer = "" 
+
+            # deal with buffer tail 
+            if not is_inside_code and tts_buffer:
+                self.flush_buffer_to_tts(tts_buffer, force_flush=True)
+
+            self.finished_signal.emit(full_response)
+            
         except Exception as e:
             error_msg = f"{str(e)}\n{traceback.format_exc()}"
             print(f"[LLMWorker] {error_msg}")
             self.error_signal.emit(str(e))
+
+    def flush_buffer_to_tts(self, text, force_flush=False):
+        if not text.strip(): 
+            return
+        sentences, remaining = self.process_buffer(text)
+        for s in sentences:
+            self.emit_clean_sentence(s)
+        if force_flush and remaining.strip():
+            self.emit_clean_sentence(remaining)
+
+    def emit_clean_sentence(self, sentence):
+        clean = sentence.strip()
+        # deal with inline code
+        clean = clean.replace('`', '') 
+        if clean:
+            self.sentence_signal.emit(clean)
+
+    def process_buffer(self, buffer):
+        sentences = []
+        current_sentence = ""
+        i = 0
+        
+        while i < len(buffer):
+            char = buffer[i]
+            current_sentence += char
+            
+            if char in self.safe_punctuations:
+                sentences.append(current_sentence)
+                current_sentence = ""
+            # deal with long number like: 4,630.50
+            elif char in self.unsafe_punctuations:
+                if i + 1 < len(buffer):
+                    next_char = buffer[i + 1]
+                    if not next_char.isdigit():
+                        sentences.append(current_sentence)
+                        current_sentence = ""
+                else:
+                    current_sentence = current_sentence[:-1]
+                    break 
+            i += 1
+            
+        remaining_buffer = current_sentence + buffer[i:]
+        return sentences, remaining_buffer

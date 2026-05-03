@@ -1,4 +1,6 @@
 from datetime import datetime
+import queue
+import sys
 
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
@@ -9,9 +11,9 @@ from core.dialog_manager import DialogManager
 from core.llm_worker import LLMWorker
 from core.summary_worker import SummaryWorker
 from core.stt_worker import WhisperSTTWorker
+from core.tts_worker import MeloTTSWorker 
 from .pet_widget import DesktopPet
 from .tray_icon import TrayIcon
-import sys
 
 class MainWindow(QMainWindow):
     def __init__(self, custom_config: dict = None):
@@ -23,10 +25,6 @@ class MainWindow(QMainWindow):
         self.pet = DesktopPet()
         self.pet.hide()
 
-        self._actually_quit = False
-        self._llm_busy = False
-        self._draft_buffer = ""
-
         self.tray = TrayIcon(self)
         self.tray.show()
         self.tray.show_main.connect(self.show_main_from_tray)
@@ -35,14 +33,26 @@ class MainWindow(QMainWindow):
 
         self.setup_ui()
 
+        self._actually_quit = False
+        self._llm_busy = False
+        self._draft_buffer = ""
+        self.tts_queue = queue.Queue()
+
         # core 
         self.dialog_manager = DialogManager()
         if custom_config:
             self.alice = AliceAI(*custom_config)
         else:
             self.alice = AliceAI()
-        self.worker = None
+        self.llm_worker = None
         self.summary_worker = None
+
+        self.stt_worker = None
+
+        self.tts_worker = MeloTTSWorker(self.tts_queue)
+        self.tts_worker.start()
+
+        self.first_greeting(custom_config)
     
     def setup_ui(self):
         # main
@@ -179,6 +189,30 @@ class MainWindow(QMainWindow):
         self.handle_send(final_text)
 
     # llm chat event
+    def first_greeting(self, custom_config: dict):
+        self.model.add_message("Alice is waking up...", False, 'loading')
+        self.chat_view.scrollToBottom()
+        self.thinking_index = self.model.rowCount() - 1
+        self.set_ui_busy(True)
+
+        cur_time = datetime.strftime(datetime.now(), "%H:%M")
+        if custom_config and custom_config["user_nick"]:
+            init_messages = [{
+                "role": "user",
+                "content": f"Wake up! Alice. It's {cur_time} now. This is {custom_config['user_nick']} speaking."
+            }]
+        else:
+            init_messages = [{
+                "role": "user",
+                "content": f"Wake up! Alice. It's {cur_time} now."
+            }]
+        self.llm_worker = LLMWorker(self.alice, init_messages)
+        self.llm_worker.word_signal.connect(self.on_llm_word)
+        self.llm_worker.sentence_signal.connect(self.on_llm_sentence)
+        self.llm_worker.finished_signal.connect(self.on_llm_reply)
+        self.llm_worker.error_signal.connect(self.on_llm_error)
+        self.llm_worker.start()       
+
     def trigger_send_from_button(self):
         text = self.input_edit.toPlainText().strip()
         if text:
@@ -194,26 +228,42 @@ class MainWindow(QMainWindow):
         self.dialog_manager.add("user", text)
 
         # waiting ui
-        self.model.add_message("Alice thinking...", False)
+        self.model.add_message("Alice thinking...", False, 'loading')
         self.chat_view.scrollToBottom()
         self.thinking_index = self.model.rowCount() - 1
         self.set_ui_busy(True)
 
         # wait for worker
         messages = self.dialog_manager.build()
-        self.worker = LLMWorker(self.alice, messages)
-        self.worker.finished_signal.connect(self.on_llm_reply)
-        self.worker.error_signal.connect(self.on_llm_error)
-        self.worker.start()
+        self.llm_worker = LLMWorker(self.alice, messages)
+        self.llm_worker.word_signal.connect(self.on_llm_word)
+        self.llm_worker.sentence_signal.connect(self.on_llm_sentence)
+        self.llm_worker.finished_signal.connect(self.on_llm_reply)
+        self.llm_worker.error_signal.connect(self.on_llm_error)
+        self.llm_worker.start()
+    
+    def on_llm_word(self, word):
+        # update chat_view
+        if self.model.messages[self.thinking_index]['msg_type'] == 'loading':
+            reply_text = ""
+            self.model.messages[self.thinking_index]['msg_type'] = 'normal'
+        else:
+            reply_text = self.model.messages[self.thinking_index]['text']
 
-    def on_llm_reply(self, reply_text):
-        # history update
-        self.dialog_manager.add("assistant", reply_text)
-
-        # ui update
+        reply_text += word
         self.model.messages[self.thinking_index]['text'] = reply_text
         self.model.layoutChanged.emit() 
         self.chat_view.scrollToBottom()
+
+    def on_llm_sentence(self, sentence):
+        self.tts_queue.put(sentence)
+
+    def on_llm_reply(self, reply_text):
+        self.llm_worker.deleteLater()
+        self.llm_worker = None
+
+        # history update
+        self.dialog_manager.add("assistant", reply_text)
 
         if self.dialog_manager.need_summurize():
             self.trigger_background_summary()
@@ -221,16 +271,20 @@ class MainWindow(QMainWindow):
             self.set_ui_busy(False)
 
     def on_llm_error(self, error_msg):
+        self.llm_worker.deleteLater()
+        self.llm_worker = None
+
         cur_time = datetime.strftime(datetime.now(), "%Y-%m-%D %H:%M:%S")
-        print(f"[{cur_time}] Summarize error")
+        print(f"[{cur_time}] LLM error")
         self.model.messages[self.thinking_index]['text'] = f"[LLM Error] {error_msg}"
+        self.model.messages[self.thinking_index]['msg_type'] = 'system'
         self.model.layoutChanged.emit()
         self.set_ui_busy(False)
     
     def trigger_background_summary(self):
         history_content = self.dialog_manager.build_to_summarize()
         self.summary_worker = SummaryWorker(self.alice, history_content)
-        self.summary_worker.summary_finished.connect(self.on_summary_done)
+        self.summary_worker.summary_finished_signal.connect(self.on_summary_done)
         self.summary_worker.error_signal.connect(self.on_summary_error)
         self.summary_worker.finished.connect(self.unlock_ui_safely)
         self.summary_worker.start()
@@ -252,6 +306,7 @@ class MainWindow(QMainWindow):
 
     def set_ui_busy(self, busy: bool):
         self._llm_busy = busy
+
         self.input_edit.setEnabled(not busy)
         self.send_btn.setEnabled(not busy)
 
@@ -261,6 +316,9 @@ class MainWindow(QMainWindow):
             self.show_pet_mode()
             e.ignore()
         else:
+            if self.stt_worker:
+                self.stt_worker.stop()
+            self.tts_worker.stop()
             QApplication.quit()
     
     def show_main_from_tray(self):
@@ -304,7 +362,8 @@ class AiViewer(QWidget):
 class MessageModel(QAbstractListModel):
     def __init__(self):
         super().__init__()
-        self.messages = []  # 存储格式：{'text': str, 'is_user': bool}
+        # {'text': str, 'is_user': bool, 'msg_type': ['normal','system','loading']}
+        self.messages = []  
 
     def rowCount(self, parent=QModelIndex()):
         return len(self.messages)
@@ -319,9 +378,9 @@ class MessageModel(QAbstractListModel):
             return message['is_user']
         return None
 
-    def add_message(self, text, is_user):
+    def add_message(self, text: str, is_user: bool, msg_type: str = 'normal'):
         self.beginInsertRows(QModelIndex(), len(self.messages), len(self.messages))
-        self.messages.append({'text': text, 'is_user': is_user})
+        self.messages.append({'text': text, 'is_user': is_user, 'msg_type': msg_type})
         self.endInsertRows()
 
 class ChatDelegate(QStyledItemDelegate):

@@ -2,11 +2,10 @@
 
 from typing import Iterator, Union
 from llama_cpp import CreateChatCompletionResponse, CreateChatCompletionStreamResponse, Llama
-from datetime import datetime
 
 from . import custom_tools
 
-MODEL_PATH = "./llm-model/llama-3.2-3b-instruct-q4_k_m.gguf"
+MODEL_PATH = "./model/llm-model/llama-3.2-3b-instruct-q4_k_m.gguf"
 
 DEFAULT_PROMPT = """
 You are a predefined AI assistant with a fixed identity.
@@ -59,7 +58,6 @@ class AliceAI:
     def __init__(
         self,
         system_prompt: str = DEFAULT_PROMPT,
-        user_nick: str = None
     ) -> None:
         self.model_path = MODEL_PATH
 
@@ -76,26 +74,6 @@ class AliceAI:
             "role": "system",
             "content": system_prompt
         }
-
-        cur_time = datetime.strftime(datetime.now(), "%H:%M")
-        if user_nick:
-            init_message = {
-                "role": "user",
-                "content": f"Wake up! Alice. It's {cur_time} now. This is {user_nick} speaking."
-            }
-        else:
-            init_message = {
-                "role": "user",
-                "content": f"Wake up! Alice. It's {cur_time} now."
-            }
-        
-        res = llm.create_chat_completion(
-            messages = [
-                self.system_message,
-                init_message
-            ]
-        )
-        print(res)
         self.llm = llm
 
     def get_response(self, user_messages: list) -> str:
@@ -130,7 +108,41 @@ class AliceAI:
             return res["choices"][0]["message"]["content"]
         else:
             return f"[LLM] {res}"
-    
+
+    def generate_stream_response(self, user_messages: list):
+        messages = [
+            self.system_message,
+            *user_messages
+        ]
+        last_content = messages[-1]["content"]
+        tool = custom_tools.tool_routing(last_content)
+        tool_res = None
+        if callable(tool):
+            tool_res = tool()
+        elif tool == "llm_function":
+            tool_parse = self.get_function_response(messages)
+            if tool_parse["choices"][0]["finish_reason"] == "tool_calls":
+                tool_res = custom_tools.tool_calling(tool_parse["choices"][0]["message"]["function_call"])
+        if tool_res:
+            messages = [
+                self.system_message,
+                *user_messages,
+                {
+                    "role": "user",
+                    "content": TOOL_PROMPT.format(
+                        content=last_content,
+                        tool_res=tool_res
+                    )
+                }
+            ]
+        
+        res = self.get_chat_response(messages, True)
+        for chunk in res:
+            delta = chunk['choices'][0]['delta']
+            # 安全提取 content
+            if 'content' in delta:
+                yield delta['content']
+
     def get_summary_response(self, history_content: str) -> str:
         history_messages = [{
             "role": "system",
@@ -157,11 +169,12 @@ class AliceAI:
         print("function response")
         return res
 
-    def get_chat_response(self, messages: list) -> Union[
+    def get_chat_response(self, messages: list, use_stream: bool = False) -> Union[
         CreateChatCompletionResponse, Iterator[CreateChatCompletionStreamResponse]
     ]:
         res = self.llm.create_chat_completion(
-            messages
+            messages,
+            stream=use_stream
         )
 
         print("chat response")
