@@ -1,4 +1,3 @@
-from collections import deque
 
 class DialogManager:
     def __init__(self, max_round = 6):
@@ -34,6 +33,6 @@ class DialogManager:
     def update_summary(self, new_summary: str):
         if new_summary:
             self.summary = new_summary
-            # 本地LLM不允许同时进行推理和总结，主线程做了限制，这里直接clear
+            # 本地LLM不允许同时进行推理和总结，主线程做了并发限制，这里直接clear
             # 多线程的方式是buildToSummarize里记录历史快照长度snap_hisotry_len，这里裁剪history=hisotry[snap_history_len:]
             self.history.clear()

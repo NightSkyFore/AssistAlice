@@ -5,13 +5,16 @@ from PySide6.QtCore import QThread, Signal
 from faster_whisper import WhisperModel
 import os
 
-WHISPER_MODEL_PATH = "./stt-model/faster-whisper-small"
+WHISPER_MODEL_PATH = {
+    "base": "./model/stt-model/faster-whisper-base",
+    "small": "./model/stt-model/faster-whisper-small"
+}
 
 class WhisperSTTWorker(QThread):
     text_signal = Signal(str)
     silence_duration_signal = Signal(float)
 
-    def __init__(self):
+    def __init__(self, local_path: str = "small"):
         super().__init__()
         self.is_running = False
         self.sample_rate = 16000
@@ -19,7 +22,7 @@ class WhisperSTTWorker(QThread):
         self.volume_threshold = 0.005 
         
         self.model = WhisperModel(
-            WHISPER_MODEL_PATH,
+            WHISPER_MODEL_PATH[local_path],
             device="cpu", 
             compute_type="int8",
             cpu_threads=2
@@ -31,7 +34,7 @@ class WhisperSTTWorker(QThread):
 
     def audio_callback(self, indata, frames, time_info, status):
         if status:
-            print(f"[WhisperWorker]Callback Exception: {status}")
+            print(f"[WhisperSTTWorker]Callback Exception: {status}")
         
         audio_data = indata.copy().flatten()
 

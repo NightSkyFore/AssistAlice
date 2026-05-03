@@ -5,7 +5,7 @@ from PySide6.QtCore import QThread, Signal
 from core.alice_ai import AliceAI
 
 class SummaryWorker(QThread):
-    summary_finished = Signal(str)
+    summary_finished_signal = Signal(str)
     error_signal = Signal(str)
 
     def __init__(self, llm_instance: AliceAI, history_content: str):
@@ -16,7 +16,7 @@ class SummaryWorker(QThread):
     def run(self):
         try:
             new_summary = self.llm.get_summary_response(self.history_content)
-            self.summary_finished.emit(new_summary)
+            self.summary_finished_signal.emit(new_summary)
         except Exception as e:
             error_msg = f"{str(e)}\n{traceback.format_exc()}"
             print(f"[SummaryWorker] {error_msg}")
