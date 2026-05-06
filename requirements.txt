@@ -1,0 +1,21 @@
+faster-whisper == 1.2.0
+jieba == 0.42.1
+llama_cpp_python == 0.3.8
+llvmlite == 0.44.0
+networkx == 2.8.8
+nltk == 3.9.1
+numba == 0.61.2
+numpy == 1.26.4
+PySide6
+PySide6_Addons
+PySide6_Essentials
+selenium == 4.41.0
+sounddevice == 0.5.5
+soundfile == 0.13.1
+tokenizers == 0.13.3
+torch == 2.5.1
+torchaudio == 2.5.1
+torchvision == 0.20.1
+transformers == 4.27.4
+unidic == 1.1.0
+unidic-lite == 1.0.8
