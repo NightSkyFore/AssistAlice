@@ -104,6 +104,15 @@ class DesktopPet(QWidget):
     def mouseDoubleClickEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
             QApplication.quit()
+    
+    def emotion_change(self, emotion):
+        if emotion not in EMOTIONS.keys():
+            return
+        self.raw_pixmap = QPixmap(EMOTIONS[emotion])
+        if self.raw_pixmap.isNull():
+            print(f"Error: No image!")
+            sys.exit(1)
+        self.update_pet_size()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

@@ -1,3 +1,4 @@
+import re
 import traceback
 
 from PySide6.QtCore import QThread, Signal
@@ -5,7 +6,8 @@ from PySide6.QtCore import QThread, Signal
 from core.alice_ai import AliceAI
 
 class LLMWorker(QThread):
-    # word for ui, and sentence for tts
+    # emotion for desktop pet, word for ui view, and sentence for tts
+    emotion_signal = Signal(str)
     word_signal = Signal(str)
     sentence_signal = Signal(str)
     finished_signal = Signal(str)
@@ -23,14 +25,43 @@ class LLMWorker(QThread):
     def run(self):
         tts_buffer = ""
         full_response = ""
+        # emotion head parsing status
+        is_parsing_head= True
+        head_buffer = ""
+        max_head_scan = 15
         # 状态机：非代码块状态/代码块状态（跳过）
         is_inside_code = False
 
         try:
             for token in self.llm.generate_stream_response(self.messages):
+                full_response += token
+
+                # parse head emotion like [smile] until meet a "]"
+                if is_parsing_head:
+                    head_buffer += token
+                    
+                    if "]" in head_buffer:
+                        is_parsing_head = False
+                        match = re.search(r'^\[(.+?)\]', head_buffer)
+                        if match:
+                            emotion = match.group(1)
+                            self.emotion_signal.emit(emotion) 
+                            
+                            real_text_start = head_buffer.split("]", 1)[1].lstrip()
+                            token = real_text_start 
+                        else:
+                            token = head_buffer 
+                    elif len(head_buffer) > max_head_scan:
+                        is_parsing_head = False
+                        token = head_buffer
+                    else:
+                        continue
+                
+                if not token:
+                    continue
+
                 # send to ui update 
                 self.word_signal.emit(token)
-                full_response += token
 
                 # processing for tts sentence 
                 tts_buffer += token

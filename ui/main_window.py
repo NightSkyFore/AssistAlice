@@ -236,11 +236,15 @@ class MainWindow(QMainWindow):
         # wait for worker
         messages = self.dialog_manager.build()
         self.llm_worker = LLMWorker(self.alice, messages)
+        self.llm_worker.emotion_signal.connect(self.on_llm_emotion)
         self.llm_worker.word_signal.connect(self.on_llm_word)
         self.llm_worker.sentence_signal.connect(self.on_llm_sentence)
         self.llm_worker.finished_signal.connect(self.on_llm_reply)
         self.llm_worker.error_signal.connect(self.on_llm_error)
         self.llm_worker.start()
+
+    def on_llm_emotion(self, emotion):
+        self.pet.emotion_change(emotion)
     
     def on_llm_word(self, word):
         # update chat_view
