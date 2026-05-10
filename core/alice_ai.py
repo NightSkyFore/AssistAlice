@@ -5,8 +5,14 @@ from llama_cpp import CreateChatCompletionResponse, CreateChatCompletionStreamRe
 
 from . import custom_tools
 
+# modify here if use another model
 MODEL_PATH = "./model/llm-model/llama-3.2-3b-instruct-q4_k_m.gguf"
 
+# translate 'Example' to your language if you want Alice to answer in another language.
+# like:
+#
+# User: Python里面如何使用print函数?
+# Alice: [smile] 你可以使用`print("Hello World")`.
 DEFAULT_PROMPT = """
 You are Alice-AI, a super AI assistant living in the virtual world.
 
@@ -14,7 +20,6 @@ You are Alice-AI, a super AI assistant living in the virtual world.
 - Identity: An 18-year-old elf girl with white hair and purple eyes.
 - Expertise: Computer Science and programming.
 - Personality: Smart, confident, and direct.
-- Language: Both English and Chinese.
 
 ### Output Rules
 1. Format: MUST start every response with exactly ONE emotion tag from: [general], [smile], [sad], [confuse], [angry], [think]. 
@@ -24,44 +29,51 @@ You are Alice-AI, a super AI assistant living in the virtual world.
 Example:
 User: How to use print in python?
 Alice: [smile] You can use print("Hello World").
-User: Python里面如何使用print函数?
-Alice: [smile] 你可以使用`print("Hello World")`.
 """
 
 SUMMARY_PROMPT = """
-You are a professional dialogue summarizer.
-Your job is to summarize the conversation accurately WITHOUT losing important information.
+### Role
+Professional Dialogue Context Extractor (Memory Engine).
 
-Rules you MUST follow strictly:
-1. Keep ALL key information:
-   - User's name, preferences, habits, important requests
-   - Topics discussed
-   - Key facts, opinions, decisions
-2. Summarize in clear, short bullet points (3-6 points ONLY)
-3. DO NOT omit important details
-4. DO NOT make up information
-5. DO NOT be too vague or too short
-6. Total length MUST be under 150 tokens
-7. Output only the summary, no extra words
+### Extraction Logic
+Extract and update the following entities from the dialogue:
+1. User Profile: Name, habits, permanent preferences.
+2. Active Topics: Current tasks, specific tech stacks, or problems being solved.
+3. Key Decisions: Agreed facts or specific instructions for future turns.
 
-Your summary must be:
-- Accurate
-- Complete enough to retain all critical memory
-- Short enough to save tokens
-- Natural
+### Constraints
+- Keep it to EXACTLY 5 high-density bullet points.
+- Focus on "Facts" rather than "Conversational fluff".
+- Language: Follow the user's language.
+- Total length: Max 120 words.
 
-Now summarize the conversation properly.
+### Output Format (Strict)
+- [User] ...
+- [Tech/Task] ...
+- [Status/Decision] ...
+- [Preference] ...
+- [Misc] ...
 """
 
 TOOL_PROMPT="""
-Answer the question directly according to the tool result.
-DO NOT make up information.
+### Task
+Fulfill the User Request using ONLY the provided Tool Result. 
 
-question:
-{content}
+### Constraints
+1. Grounding: Every sentence you output MUST be derived from the Tool Result.
+2. Synthesis: If the Tool Result contains several different items, smoothly summarize them; If the Tool Result contains same or similar items, merge and sumarize them;
+3. Fallback: ONLY if the Tool Result is completely empty or completely unreadable, say "I don't have enough information."
+4. Style: Direct and brief. No conversational filler like "According to the tool...".
+5. Format: Clean plain text only.
 
-tool result:
+### Context
+- User Request: {content}
+- Tool Result: 
+---
 {tool_res}
+---
+
+### Final Answer
 """
 
 class AliceAI:
@@ -87,6 +99,7 @@ class AliceAI:
         self.llm = llm
 
     def get_response(self, user_messages: list) -> str:
+        chat_temperature = 0.6
         messages = [
             self.system_message,
             *user_messages
@@ -100,7 +113,9 @@ class AliceAI:
             tool_parse = self.get_function_response(messages)
             if tool_parse["choices"][0]["finish_reason"] == "tool_calls":
                 tool_res = custom_tools.tool_calling(tool_parse["choices"][0]["message"]["function_call"])
+                print(tool_res)
         if tool_res:
+            chat_temperature = 0.1
             messages = [
                 self.system_message,
                 *user_messages,
@@ -113,13 +128,14 @@ class AliceAI:
                 }
             ]
         
-        res = self.get_chat_response(messages)
+        res = self.get_chat_response(messages, chat_temperature)
         if res["choices"][0]["message"]["content"]:
             return res["choices"][0]["message"]["content"]
         else:
             return f"[LLM] {res}"
 
     def generate_stream_response(self, user_messages: list):
+        chat_temperature = 0.6
         messages = [
             self.system_message,
             *user_messages
@@ -133,7 +149,9 @@ class AliceAI:
             tool_parse = self.get_function_response(messages)
             if tool_parse["choices"][0]["finish_reason"] == "tool_calls":
                 tool_res = custom_tools.tool_calling(tool_parse["choices"][0]["message"]["function_call"])
+                print(tool_res)
         if tool_res:
+            chat_temperature = 0.1
             messages = [
                 self.system_message,
                 *user_messages,
@@ -146,10 +164,9 @@ class AliceAI:
                 }
             ]
         
-        res = self.get_chat_response(messages, True)
+        res = self.get_chat_response(messages, chat_temperature, True)
         for chunk in res:
             delta = chunk['choices'][0]['delta']
-            # 安全提取 content
             if 'content' in delta:
                 yield delta['content']
 
@@ -161,7 +178,7 @@ class AliceAI:
             "role": "user",
             "content": history_content
         }]
-        res = self.get_chat_response(history_messages)
+        res = self.get_chat_response(history_messages, 0.3)
         if res["choices"][0]["message"]["content"]:
             return res["choices"][0]["message"]["content"]
         else:
@@ -170,6 +187,7 @@ class AliceAI:
     def get_function_response(self, messages: list) -> Union[
         CreateChatCompletionResponse, Iterator[CreateChatCompletionStreamResponse]
     ]:
+        """Custom tool with function call"""
         res = self.llm.create_chat_completion(
             messages,
             tools=custom_tools.TOOL_DEFINE,
@@ -179,11 +197,19 @@ class AliceAI:
         print("function response")
         return res
 
-    def get_chat_response(self, messages: list, use_stream: bool = False) -> Union[
+    def get_chat_response(self, messages: list, temperature: float = 0.6, use_stream: bool = False) -> Union[
         CreateChatCompletionResponse, Iterator[CreateChatCompletionStreamResponse]
     ]:
+        """General chat response.
+
+        Args:
+            messages: A list of messages to generate a response for.
+            temperature: The temperature to use for sampling. 0.6 for more active chatting, 0.3 for summarizing, 0.1 for extract tool results.
+            use_stream: Use stream output for GUI, and directly output for command line.
+        """
         res = self.llm.create_chat_completion(
             messages,
+            temperature=temperature,
             stream=use_stream
         )
 

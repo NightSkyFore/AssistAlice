@@ -267,6 +267,7 @@ class MainWindow(QMainWindow):
         self.llm_worker = None
 
         # history update
+        print(f"Alice: {reply_text}")
         self.dialog_manager.add("assistant", reply_text)
 
         if self.dialog_manager.need_summurize():
