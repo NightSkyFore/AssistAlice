@@ -61,7 +61,10 @@ Fulfill the User Request using ONLY the provided Tool Result.
 
 ### Constraints
 1. Grounding: Every sentence you output MUST be derived from the Tool Result.
-2. Synthesis: If the Tool Result contains several different items, smoothly summarize them; If the Tool Result contains same or similar items, merge and sumarize them;
+2. Synthesis: 
+    If the Tool Result contains several different items, smoothly summarize them; 
+    If the Tool Result contains same or similar items, merge and sumarize them;
+    For others, just deliver it.
 3. Fallback: ONLY if the Tool Result is completely empty or completely unreadable, say "I don't have enough information."
 4. Style: Direct and brief. No conversational filler like "According to the tool...".
 5. Format: Clean plain text only.
@@ -222,6 +225,8 @@ if __name__ == "__main__":
     user_messages.append({"role": "user", "content": "how are you today"})
     print(alice.get_response(user_messages))
     user_messages.append({"role": "user", "content": "google the latest news."})
+    print(alice.get_response(user_messages))
+    user_messages.append({"role": "user", "content": "google the gold price"})
     print(alice.get_response(user_messages))
     user_messages.append({"role": "user", "content": "what's the time now?"})
     print(alice.get_response(user_messages))
