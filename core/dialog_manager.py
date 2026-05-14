@@ -36,7 +36,7 @@ class DialogManager:
     def build(self) -> list:
         if self.summary:
             return [
-                {"role": "assistant", "content": f"###Long-term Memory\n{self.summary}"},
+                {"role": "memory", "content": f"###Long-term Memory\n{self.summary}"},
                 *self.history
             ]
         else:

@@ -95,18 +95,22 @@ class AliceAI:
             verbose=False
         )
 
-        self.system_message = {
-            "role": "system",
-            "content": system_prompt
-        }
+        self.system_prompt = system_prompt
         self.llm = llm
 
     def get_response(self, user_messages: list) -> str:
         chat_temperature = 0.6
-        messages = [
-            self.system_message,
-            *user_messages
-        ]
+        if user_messages and user_messages[0]["role"] == "memory":
+            messages = [
+                # 将第一条中的核心记忆上提到system级别中
+                {"role": "system", "content": f"{self.system_message}\n\n{user_messages[0]['content']}"},
+                *user_messages[1:]
+            ]
+        else:
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                *user_messages
+            ]
         last_content = messages[-1]["content"]
         tool = custom_tools.tool_routing(last_content)
         tool_res = None
@@ -120,8 +124,8 @@ class AliceAI:
         if tool_res:
             chat_temperature = 0.1
             messages = [
-                self.system_message,
-                *user_messages,
+                # 工具使用，重组最后一条对话提示词
+                *messages[:-1],
                 {
                     "role": "user",
                     "content": TOOL_PROMPT.format(
@@ -139,10 +143,17 @@ class AliceAI:
 
     def generate_stream_response(self, user_messages: list):
         chat_temperature = 0.6
-        messages = [
-            self.system_message,
-            *user_messages
-        ]
+        if user_messages and user_messages[0]["role"] == "memory":
+            messages = [
+                # 将第一条中的核心记忆上提到system级别中
+                {"role": "system", "content": f"{self.system_message}\n\n{user_messages[0]['content']}"},
+                *user_messages[1:]
+            ]
+        else:
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                *user_messages
+            ]
         last_content = messages[-1]["content"]
         tool = custom_tools.tool_routing(last_content)
         tool_res = None
@@ -156,8 +167,8 @@ class AliceAI:
         if tool_res:
             chat_temperature = 0.1
             messages = [
-                self.system_message,
-                *user_messages,
+                # 工具使用，重组最后一条对话提示词
+                *messages[:-1],
                 {
                     "role": "user",
                     "content": TOOL_PROMPT.format(
