@@ -138,6 +138,10 @@ class MainWindow(QMainWindow):
                 font-size: 14px;
                 padding: 15px;
             }
+            QPushButton:disabled {
+                background-color: #3a3a3a;
+                color: grey;
+            }
         """)
         self.send_btn.clicked.connect(self.trigger_send_from_button)
 
@@ -293,6 +297,8 @@ class MainWindow(QMainWindow):
         self.summary_worker.error_signal.connect(self.on_summary_error)
         self.summary_worker.finished.connect(self.unlock_ui_safely)
         self.summary_worker.start()
+
+        self.pet.on_summary_thinking()
     
     def on_summary_done(self, new_summary: str):
         self.dialog_manager.update_summary(new_summary)
@@ -304,6 +310,8 @@ class MainWindow(QMainWindow):
         print(f"[{cur_time}] Summarize error")
     
     def unlock_ui_safely(self):
+        self.pet.on_summary_finish()
+
         self.set_ui_busy(False)
 
         self.summary_worker.deleteLater() 
@@ -312,7 +320,7 @@ class MainWindow(QMainWindow):
     def set_ui_busy(self, busy: bool):
         self._llm_busy = busy
 
-        self.input_edit.setEnabled(not busy)
+        self.input_edit.toggle_send_enabled(not busy)
         self.send_btn.setEnabled(not busy)
 
     # window action
@@ -472,11 +480,14 @@ class ChatInputArea(QPlainTextEdit):
         font.setPointSize(11)
         self.setFont(font)
 
+        # 自定义enable状态，disable时允许输入但不可发送
+        self._enable_key_send = True
+
     def keyPressEvent(self, event: QKeyEvent):
         # 捕获回车键 (包括主键盘回车和小键盘回车)
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             # 判断是否按下了 Ctrl 键
-            if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            if self._enable_key_send and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
                 # Ctrl + Enter: 触发发送信号，并清空输入框
                 text = self.toPlainText().strip()
                 if text:
@@ -490,6 +501,9 @@ class ChatInputArea(QPlainTextEdit):
         else:
             # 其他按键，走默认行为
             super().keyPressEvent(event)
+
+    def toggle_send_enabled(self, enable_send: bool):
+        self._enable_key_send = enable_send
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

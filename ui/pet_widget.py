@@ -41,6 +41,8 @@ class DesktopPet(QWidget):
         self.update_pet_size()
         self.move_to_bottom_right()
 
+        self._current_pixmap = self.raw_pixmap
+
     def update_pet_size(self):
         width = int(self.raw_pixmap.width() * self.scale)
         height = int(self.raw_pixmap.height() * self.scale)
@@ -105,6 +107,14 @@ class DesktopPet(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             QApplication.quit()
     
+    def on_summary_thinking(self):
+        self._current_pixmap = self.raw_pixmap
+        self.emotion_change("think")
+
+    def on_summary_finish(self):
+        self.raw_pixmap = self._current_pixmap
+        self.update_pet_size()
+
     def emotion_change(self, emotion):
         if emotion not in EMOTIONS.keys():
             return
