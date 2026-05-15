@@ -45,7 +45,7 @@ class MemoryManager:
         # load dialog according to last_msg_id
         cursor.execute(
             "SELECT role, content FROM dialog_history WHERE id > ? ORDER BY id ASC", 
-            (last_id)
+            (last_id,)
         )
         last_hist = [{"role": r, "content": c} for r, c in cursor.fetchall()]
         

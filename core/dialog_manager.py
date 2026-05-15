@@ -1,7 +1,7 @@
 import queue
 
 from core.mem_worker import MemoryWorker
-from memory_manager import MemoryManager
+from core.memory_manager import MemoryManager
 
 class DialogManager:
     def __init__(self, max_round = 6):
