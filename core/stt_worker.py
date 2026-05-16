@@ -3,7 +3,6 @@ import numpy as np
 import sounddevice as sd
 from PySide6.QtCore import QThread, Signal
 from faster_whisper import WhisperModel
-import os
 
 WHISPER_MODEL_PATH = {
     "base": "./model/stt-model/faster-whisper-base",
@@ -85,7 +84,7 @@ class WhisperSTTWorker(QThread):
                             dtype='float32',
                             callback=self.audio_callback):
             while self.is_running:
-                sd.sleep(10000) 
+                sd.sleep(500) 
 
     def stop(self):
         self.is_running = False
