@@ -332,6 +332,7 @@ class MainWindow(QMainWindow):
             if self.stt_worker:
                 self.stt_worker.stop()
             self.tts_worker.stop()
+            self.dialog_manager.close_mem()
             QApplication.quit()
     
     def show_main_from_tray(self):

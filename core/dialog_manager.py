@@ -61,3 +61,6 @@ class DialogManager:
             self.history.clear()
             task = {"action": "new_summary", "content": new_summary}
             self.db_queue.put(task)
+    
+    def close_mem(self):
+        self.mem_worker.stop()
