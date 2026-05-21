@@ -83,6 +83,7 @@ class AliceAI:
     def __init__(
         self,
         system_prompt: str = DEFAULT_PROMPT,
+        **kwargs,
     ) -> None:
         self.model_path = MODEL_PATH
 
