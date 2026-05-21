@@ -28,6 +28,7 @@ class MemoryManager:
             )
         ''')
         conn.commit()
+        conn.close()
         print("Memory Ready...")
 
     def load_memory(self):
