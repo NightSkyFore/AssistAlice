@@ -1,3 +1,4 @@
+import queue
 import re
 import traceback
 
@@ -11,18 +12,35 @@ class LLMWorker(QThread):
     word_signal = Signal(str)
     sentence_signal = Signal(str)
     finished_signal = Signal(str)
+
+    # background sumarize
+    summary_finished_signal = Signal(str)
+
     error_signal = Signal(str)
 
-    def __init__(self, llm_instance: AliceAI, messages: list):
+    def __init__(self, llm_instance: AliceAI, msg_queue: queue.Queue):
         super().__init__()
         self.llm = llm_instance
-        self.messages = messages
+        self.msg_queue = msg_queue
+        self.is_running = False
 
         # 断句
         self.safe_punctuations = set("，。！？；\n!?;")
         self.unsafe_punctuations = set(",.")
 
     def run(self):
+        self.is_running = True
+        while self.is_running:
+            try:
+                task = self.msg_queue.get(timeout=0.1)
+                if task["type"] == "chat":
+                    self.chat(task["msg"])
+                elif task["type"] == "summarize":
+                    self.summarize(task["msg"])
+            except queue.Empty:
+                continue
+
+    def chat(self, messages: list):
         tts_buffer = ""
         full_response = ""
         # emotion head parsing status
@@ -33,7 +51,7 @@ class LLMWorker(QThread):
         is_inside_code = False
 
         try:
-            for token in self.llm.generate_stream_response(self.messages):
+            for token in self.llm.generate_stream_response(messages):
                 full_response += token
 
                 # parse head emotion like [smile] until meet a "]"
@@ -148,3 +166,16 @@ class LLMWorker(QThread):
             
         remaining_buffer = current_sentence + buffer[i:]
         return sentences, remaining_buffer
+    
+    def summarize(self, content: str):
+        try:
+            new_summary = self.llm.get_summary_response(content)
+            self.summary_finished_signal.emit(new_summary)
+        except Exception as e:
+            error_msg = f"{str(e)}\n{traceback.format_exc()}"
+            print(f"[LLMWorker]Summarize: {error_msg}")
+            self.error_signal.emit(str(e))
+
+    def stop(self):
+        self.is_running = False
+        self.wait()

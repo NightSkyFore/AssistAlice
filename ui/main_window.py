@@ -8,15 +8,15 @@ from PySide6.QtGui import *
 
 from core.alice_ai import AliceAI
 from core.dialog_manager import DialogManager
+from core.input_monitor import InputMonitor
 from core.llm_worker import LLMWorker
-from core.summary_worker import SummaryWorker
 from core.stt_worker import WhisperSTTWorker
 from core.tts_worker import MeloTTSWorker 
 from .pet_widget import DesktopPet
 from .tray_icon import TrayIcon
 
 class MainWindow(QMainWindow):
-    def __init__(self, custom_config: dict = None):
+    def __init__(self, custom_config: dict = {}):
         super().__init__()
         # ui
         self.setWindowTitle("Alice AI Assistant")
@@ -36,21 +36,31 @@ class MainWindow(QMainWindow):
         self._actually_quit = False
         self._llm_busy = False
         self._draft_buffer = ""
+        self.llm_queue = queue.Queue()
         self.tts_queue = queue.Queue()
 
         # core 
         self.dialog_manager = DialogManager()
-        if custom_config:
-            self.alice = AliceAI(*custom_config)
-        else:
-            self.alice = AliceAI()
-        self.llm_worker = None
-        self.summary_worker = None
+
+        self.alice = AliceAI(**custom_config)
+        self.llm_worker = LLMWorker(self.alice, self.llm_queue)
+        self.llm_worker.word_signal.connect(self.on_llm_word)
+        self.llm_worker.sentence_signal.connect(self.on_llm_sentence)
+        self.llm_worker.finished_signal.connect(self.on_llm_reply)
+        self.llm_worker.summary_finished_signal.connect(self.on_summary_done)
+        self.llm_worker.error_signal.connect(self.on_llm_error)
+        self.llm_worker.start()
 
         self.stt_worker = None
 
         self.tts_worker = MeloTTSWorker(self.tts_queue)
         self.tts_worker.start()
+
+        self.moniter = InputMonitor(**custom_config)
+        self.moniter.toggle_mic_signal.connect(self.toggle_microphone)
+        self.moniter.remind_status_signal.connect(self.on_reminding)
+        self.moniter.work_status_signal.connect(self.on_daily_work_summary)
+        self.moniter.start()
 
         self.first_greeting(custom_config)
     
@@ -200,7 +210,7 @@ class MainWindow(QMainWindow):
         self.set_ui_busy(True)
 
         cur_time = datetime.strftime(datetime.now(), "%H:%M")
-        if custom_config and custom_config["user_nick"]:
+        if custom_config["user_nick"]:
             init_messages = [{
                 "role": "user",
                 "content": f"Wake up! Alice. It's {cur_time} now. This is {custom_config['user_nick']} speaking."
@@ -210,12 +220,7 @@ class MainWindow(QMainWindow):
                 "role": "user",
                 "content": f"Wake up! Alice. It's {cur_time} now."
             }]
-        self.llm_worker = LLMWorker(self.alice, init_messages)
-        self.llm_worker.word_signal.connect(self.on_llm_word)
-        self.llm_worker.sentence_signal.connect(self.on_llm_sentence)
-        self.llm_worker.finished_signal.connect(self.on_llm_reply)
-        self.llm_worker.error_signal.connect(self.on_llm_error)
-        self.llm_worker.start()       
+        self.llm_queue.put({"type": "chat", "msg": init_messages})
 
     def trigger_send_from_button(self):
         text = self.input_edit.toPlainText().strip()
@@ -239,13 +244,7 @@ class MainWindow(QMainWindow):
 
         # wait for worker
         messages = self.dialog_manager.build()
-        self.llm_worker = LLMWorker(self.alice, messages)
-        self.llm_worker.emotion_signal.connect(self.on_llm_emotion)
-        self.llm_worker.word_signal.connect(self.on_llm_word)
-        self.llm_worker.sentence_signal.connect(self.on_llm_sentence)
-        self.llm_worker.finished_signal.connect(self.on_llm_reply)
-        self.llm_worker.error_signal.connect(self.on_llm_error)
-        self.llm_worker.start()
+        self.llm_queue.put({"type": "chat", "msg": messages})
 
     def on_llm_emotion(self, emotion):
         self.pet.emotion_change(emotion)
@@ -267,9 +266,6 @@ class MainWindow(QMainWindow):
         self.tts_queue.put(sentence)
 
     def on_llm_reply(self, reply_text):
-        self.llm_worker.deleteLater()
-        self.llm_worker = None
-
         # history update
         print(f"Alice: {reply_text}")
         self.dialog_manager.add("assistant", reply_text)
@@ -280,48 +276,41 @@ class MainWindow(QMainWindow):
             self.set_ui_busy(False)
 
     def on_llm_error(self, error_msg):
-        self.llm_worker.deleteLater()
-        self.llm_worker = None
-
         cur_time = datetime.strftime(datetime.now(), "%Y-%m-%D %H:%M:%S")
         print(f"[{cur_time}] LLM error")
-        self.model.messages[self.thinking_index]['text'] = f"[LLM Error] {error_msg}"
-        self.model.messages[self.thinking_index]['msg_type'] = 'system'
+        self.model.add_message(f"[LLM Error] {error_msg}", False, 'system')
         self.model.layoutChanged.emit()
         self.set_ui_busy(False)
     
-    def trigger_background_summary(self):
-        history_content = self.dialog_manager.build_to_summarize()
-        self.summary_worker = SummaryWorker(self.alice, history_content)
-        self.summary_worker.summary_finished_signal.connect(self.on_summary_done)
-        self.summary_worker.error_signal.connect(self.on_summary_error)
-        self.summary_worker.finished.connect(self.unlock_ui_safely)
-        self.summary_worker.start()
-
+    def trigger_background_summary(self, user_status = ""):
         self.pet.on_summary_thinking()
+
+        history_content = self.dialog_manager.build_to_summarize()
+        if user_status:
+            history_content = f"{history_content}\n\n{user_status}"
+        self.llm_queue.put({"type": "summarize", "msg": history_content})
     
     def on_summary_done(self, new_summary: str):
         self.dialog_manager.update_summary(new_summary)
         cur_time = datetime.strftime(datetime.now(), "%Y-%m-%D %H:%M:%S")
         print(f"[{cur_time}] Summarize done")
 
-    def on_summary_error(self, error_msg: str):
-        cur_time = datetime.strftime(datetime.now(), "%Y-%m-%D %H:%M:%S")
-        print(f"[{cur_time}] Summarize error")
-    
-    def unlock_ui_safely(self):
         self.pet.on_summary_finish()
-
         self.set_ui_busy(False)
-
-        self.summary_worker.deleteLater() 
-        self.summary_worker = None
 
     def set_ui_busy(self, busy: bool):
         self._llm_busy = busy
 
         self.input_edit.toggle_send_enabled(not busy)
         self.send_btn.setEnabled(not busy)
+    
+    # input moniter
+    def on_reminding(self, message):
+        self.tts_queue.put(message)
+    
+    def on_daily_work_summary(self, work_status):
+        self.set_ui_busy(True)
+        self.trigger_background_summary(work_status)
 
     # window action
     def closeEvent(self, e):
@@ -331,8 +320,12 @@ class MainWindow(QMainWindow):
         else:
             if self.stt_worker:
                 self.stt_worker.stop()
+            self.llm_worker.stop()
             self.tts_worker.stop()
+            self.moniter.stop()
+
             self.dialog_manager.close_mem()
+
             QApplication.quit()
     
     def show_main_from_tray(self):
