@@ -63,8 +63,7 @@ class MeloTTSWorker(QThread):
 
         while self.is_running:
             try:
-                # 阻塞等待队列中的句子，超时 1 秒以便能响应 stop()
-                sentence = self.tts_queue.get(timeout=1.0)
+                sentence = self.tts_queue.get(timeout=0.1)
                 if sentence:
                     self._play_audio(sentence)
                     self.tts_queue.task_done()

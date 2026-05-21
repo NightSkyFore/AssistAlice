@@ -84,7 +84,7 @@ class WhisperSTTWorker(QThread):
                             dtype='float32',
                             callback=self.audio_callback):
             while self.is_running:
-                sd.sleep(500) 
+                sd.sleep(100)
 
     def stop(self):
         self.is_running = False
