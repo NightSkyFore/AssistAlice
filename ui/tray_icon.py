@@ -26,9 +26,8 @@ class TrayIcon(QSystemTrayIcon):
 
         self.record_status = False
 
-    def change_status(self):
-        self.record_status = not self.record_status
-        if self.record_status:
+    def change_status(self, checked: bool):
+        if checked:
             self.setIcon(QIcon("./assets/tray_icon_record.png"))   
         else:
             self.setIcon(QIcon("./assets/tray_icon.png"))

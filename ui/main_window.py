@@ -174,6 +174,7 @@ class MainWindow(QMainWindow):
         else:
             self.mic_btn.setText("🎙️ Microphone Closed")
             self.stop_stt()
+        self.tray.change_status(checked)
     
     def start_stt(self):
         self.stt_worker = WhisperSTTWorker()
