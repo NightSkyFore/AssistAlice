@@ -6,6 +6,8 @@ from PySide6.QtCore import QThread, Signal
 
 from core.alice_ai import AliceAI
 
+_POISON_PILL = object()
+
 class LLMWorker(QThread):
     # emotion for desktop pet, word for ui view, and sentence for tts
     emotion_signal = Signal(str)
@@ -22,21 +24,26 @@ class LLMWorker(QThread):
         super().__init__()
         self.llm = llm_instance
         self.msg_queue = msg_queue
-        self.is_running = False
 
         # 断句
         self.safe_punctuations = set("，。！？；\n!?;")
         self.unsafe_punctuations = set(",.")
 
     def run(self):
-        self.is_running = True
-        while self.is_running:
+        while True:
             try:
-                task = self.msg_queue.get(timeout=0.1)
+                task = self.msg_queue.get()
+
+                if task is _POISON_PILL:
+                    self.msg_queue.task_done()
+                    break
+
                 if task["type"] == "chat":
                     self.chat(task["msg"])
                 elif task["type"] == "summarize":
                     self.summarize(task["msg"])
+                
+                self.msg_queue.task_done()
             except queue.Empty:
                 continue
 
@@ -177,5 +184,5 @@ class LLMWorker(QThread):
             self.error_signal.emit(str(e))
 
     def stop(self):
-        self.is_running = False
+        self.msg_queue.put(_POISON_PILL)
         self.wait()

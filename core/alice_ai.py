@@ -83,6 +83,7 @@ class AliceAI:
     def __init__(
         self,
         system_prompt: str = DEFAULT_PROMPT,
+        llm_cpu: int = 8,
         **kwargs,
     ) -> None:
         self.model_path = MODEL_PATH
@@ -91,20 +92,22 @@ class AliceAI:
             model_path=self.model_path,
             seed=23,
             n_ctx=2048,
-            n_threads=8,
+            n_threads=llm_cpu,
             chat_format="llama-3",
             verbose=False
         )
 
         self.system_prompt = system_prompt
+        print(f"System Prompts:\n{self.system_prompt}")
         self.llm = llm
+        print(f"[Alice]LLM Ready with {llm_cpu} CPUs...")
 
     def get_response(self, user_messages: list) -> str:
         chat_temperature = 0.6
         if user_messages and user_messages[0]["role"] == "memory":
             messages = [
                 # 将第一条中的核心记忆上提到system级别中
-                {"role": "system", "content": f"{self.system_message}\n\n{user_messages[0]['content']}"},
+                {"role": "system", "content": f"{self.system_prompt}\n\n{user_messages[0]['content']}"},
                 *user_messages[1:]
             ]
         else:
@@ -147,7 +150,7 @@ class AliceAI:
         if user_messages and user_messages[0]["role"] == "memory":
             messages = [
                 # 将第一条中的核心记忆上提到system级别中
-                {"role": "system", "content": f"{self.system_message}\n\n{user_messages[0]['content']}"},
+                {"role": "system", "content": f"{self.system_prompt}\n\n{user_messages[0]['content']}"},
                 *user_messages[1:]
             ]
         else:

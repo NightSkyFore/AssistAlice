@@ -2,16 +2,16 @@ from datetime import datetime
 import queue
 import sys
 
-from PySide6.QtWidgets import *
-from PySide6.QtCore import *
-from PySide6.QtGui import *
+from PySide6.QtWidgets import QApplication, QListView, QMainWindow, QPlainTextEdit, QPushButton, QStyledItemDelegate, QVBoxLayout, QWidget, QHBoxLayout
+from PySide6.QtCore import QModelIndex, QRectF, QSize, Qt, QAbstractListModel, Signal
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QKeyEvent, QPixmap, QPainter, QTextDocument
 
 from core.alice_ai import AliceAI
 from core.dialog_manager import DialogManager
 from core.input_monitor import InputMonitor
 from core.llm_worker import LLMWorker
 from core.stt_worker import WhisperSTTWorker
-from core.tts_worker import MeloTTSWorker 
+from core.tts_worker import MeloTTSWorker
 from .pet_widget import DesktopPet
 from .tray_icon import TrayIcon
 
@@ -33,6 +33,7 @@ class MainWindow(QMainWindow):
 
         self.setup_ui()
 
+        self._custom_config = custom_config
         self._actually_quit = False
         self._llm_busy = False
         self._draft_buffer = ""
@@ -53,16 +54,16 @@ class MainWindow(QMainWindow):
 
         self.stt_worker = None
 
-        self.tts_worker = MeloTTSWorker(self.tts_queue)
+        self.tts_worker = MeloTTSWorker(self.tts_queue, **custom_config)
         self.tts_worker.start()
 
         self.moniter = InputMonitor(**custom_config)
-        self.moniter.toggle_mic_signal.connect(self.toggle_microphone)
+        self.moniter.toggle_mic_signal.connect(self.mic_btn.animateClick)
         self.moniter.remind_status_signal.connect(self.on_reminding)
         self.moniter.work_status_signal.connect(self.on_daily_work_summary)
         self.moniter.start()
 
-        self.first_greeting(custom_config)
+        self.first_greeting()
     
     def setup_ui(self):
         # main
@@ -177,7 +178,7 @@ class MainWindow(QMainWindow):
         self.tray.change_status(checked)
     
     def start_stt(self):
-        self.stt_worker = WhisperSTTWorker()
+        self.stt_worker = WhisperSTTWorker(**self._custom_config)
         self.stt_worker.text_signal.connect(self.on_voice_input)
         self.stt_worker.silence_duration_signal.connect(self.handle_silence)
         self.stt_worker.start()
@@ -204,17 +205,17 @@ class MainWindow(QMainWindow):
         self.handle_send(final_text)
 
     # llm chat event
-    def first_greeting(self, custom_config: dict):
+    def first_greeting(self):
         self.model.add_message("Alice is waking up...", False, 'loading')
         self.chat_view.scrollToBottom()
         self.thinking_index = self.model.rowCount() - 1
         self.set_ui_busy(True)
 
         cur_time = datetime.strftime(datetime.now(), "%H:%M")
-        if custom_config["user_nick"]:
+        if self._custom_config["user_nick"]:
             init_messages = [{
                 "role": "user",
-                "content": f"Wake up! Alice. It's {cur_time} now. This is {custom_config['user_nick']} speaking."
+                "content": f"Wake up! Alice. It's {cur_time} now. This is {self._custom_config['user_nick']} speaking."
             }]
         else:
             init_messages = [{

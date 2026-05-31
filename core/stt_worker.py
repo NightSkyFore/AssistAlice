@@ -13,7 +13,7 @@ class WhisperSTTWorker(QThread):
     text_signal = Signal(str)
     silence_duration_signal = Signal(float)
 
-    def __init__(self, local_path: str = "small"):
+    def __init__(self, stt_model_size: str = "small", lang: str = "en", stt_cpu: int = 2, **kwargs,):
         super().__init__()
         self.is_running = False
         self.sample_rate = 16000
@@ -21,17 +21,33 @@ class WhisperSTTWorker(QThread):
         self.volume_threshold = 0.005 
         
         self.model = WhisperModel(
-            WHISPER_MODEL_PATH[local_path],
+            WHISPER_MODEL_PATH[stt_model_size],
             device="cpu", 
             compute_type="int8",
-            cpu_threads=2
+            cpu_threads=stt_cpu
         )
+
+        self.transcribe_config = {
+            "zh": "这是一段中文和英文混合的日常对话。包含常用词汇如：Hello, OK, Python, UI, Bug, Linux, Alice。",
+            "en": "This is a casual conversation. Here are some common words: Hello, okay, Python, UI, bug, Linux, Alice.",
+            "jp": "これは日本語と英語が混ざった日常会話です。ええと、よく使う言葉：こんにちは、OK、Python、UI、バグ、Linux、Alice、アリス。"
+        }
+        self.lang = lang if lang in self.transcribe_config.keys() else "en"
         
         self.audio_buffer = []
         self.last_speech_time = time.time()
         self.is_speaking = False
 
-    def audio_callback(self, indata, frames, time_info, status):
+    def run(self):
+        self.is_running = True
+        with sd.InputStream(samplerate=self.sample_rate, 
+                            channels=1, 
+                            dtype='float32',
+                            callback=self._audio_callback):
+            while self.is_running:
+                sd.sleep(100)
+
+    def _audio_callback(self, indata, frames, time_info, status):
         if status:
             print(f"[WhisperSTTWorker]Callback Exception: {status}")
         
@@ -51,24 +67,22 @@ class WhisperSTTWorker(QThread):
 
             # 【断句逻辑】：停顿超过 0.8s 且 buffer 里有东西，触发转录。避免攒一堆长句
             if self.is_speaking and silence_duration > 0.8:
-                self.trigger_transcription()
+                self._trigger_transcription()
                 self.is_speaking = False
 
-    def trigger_transcription(self):
+    def _trigger_transcription(self):
         if not self.audio_buffer:
             return
         full_audio = np.concatenate(self.audio_buffer)
         self.audio_buffer = [] 
 
-        magic_prompt = "这是一段中文和英文混合的日常对话。包含常用词汇如：Hello, OK, Python, UI, Bug, Linux, Alice。"
-        
         segments, _ = self.model.transcribe(
             full_audio, 
             beam_size=1, 
-            language="zh",
+            language=self.lang,
             task="transcribe",      
             vad_filter=True,
-            initial_prompt=magic_prompt,
+            initial_prompt=self.transcribe_config[self.lang],
             condition_on_previous_text=False, 
             temperature=[0.0, 0.2, 0.4]
         )
@@ -76,15 +90,6 @@ class WhisperSTTWorker(QThread):
         text = "".join([s.text for s in segments])
         if text.strip():
             self.text_signal.emit(text)
-
-    def run(self):
-        self.is_running = True
-        with sd.InputStream(samplerate=self.sample_rate, 
-                            channels=1, 
-                            dtype='float32',
-                            callback=self.audio_callback):
-            while self.is_running:
-                sd.sleep(100)
 
     def stop(self):
         self.is_running = False

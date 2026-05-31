@@ -10,7 +10,7 @@ class InputMonitor(QThread):
     # send to LLM
     work_status_signal = Signal(str)
 
-    def __init__(self, work_time = "9:00", sleep_time = "0:30", **kwargs,):
+    def __init__(self, work_time = "9:00", sleep_time = "23:30", **kwargs,):
         super().__init__()
         self.is_running = True
 
@@ -22,15 +22,16 @@ class InputMonitor(QThread):
             keyboard.HotKey.parse('<alt>+r'),
             self.on_hotkey_triggered
         )
+
+        self.status = WorkStatus()
+        self.status.rs_internal_signal.connect(self.forward_rs_signal)
+        self.status.ws_internal_signal.connect(self.forward_ws_signal)
         
         self.k_listener = None
         self.m_listener = None
 
-        self.status = WorkStatus()
-        self.status.status_internal_signal.connect(self.forward_status_signal)
-
-        self.work_time = datetime.time.strptime(work_time, "%H:%M")
-        self.sleep_time = datetime.time.strptime(sleep_time, "%H:%M")
+        self.work_time = datetime.datetime.strptime(work_time, "%H:%M").time()
+        self.sleep_time = datetime.datetime.strptime(sleep_time, "%H:%M").time()
 
     def on_hotkey_triggered(self):
         self.toggle_mic_signal.emit()
@@ -67,7 +68,7 @@ class InputMonitor(QThread):
         self.k_listener.start()
         self.m_listener.start()
 
-        print("[InputMonitor]Ready")
+        print("[InputMonitor]Ready...")
 
         while self.is_running:
             # small steps for 1 min, for every 10 seconds, check if active
@@ -124,7 +125,7 @@ class WorkStatus(QObject):
     ws_internal_signal = Signal(str)
 
     def __init__(self):
-        super.__init__()
+        super().__init__()
         self.status = "Idle"
         # date
         self.last_record_date = datetime.datetime.now().date()
@@ -172,7 +173,7 @@ class WorkStatus(QObject):
             self.rs_internal_signal.emit("It's too late to sleep!")
             self.alarmed = True
 
-    def time_late(cur_time: datetime.time, work_time: datetime.time, sleep_time: datetime.time) -> bool:
+    def time_late(self, cur_time: datetime.time, work_time: datetime.time, sleep_time: datetime.time) -> bool:
         return (sleep_time > work_time and cur_time > sleep_time) \
             or sleep_time < cur_time < work_time
 
@@ -184,7 +185,7 @@ class WorkStatus(QObject):
             browsing = format_minutes(self.browsing_time)
             gaming = format_minutes(self.gaming_time)
 
-            work_status_info = f"[{self.last_record_date.strftime("%Y-%m-%d")}]Coding: {coding} Browsing: {browsing} Gaming: {gaming}"
+            work_status_info = f"[{self.last_record_date.strftime('%Y-%m-%d')}]Coding: {coding} Browsing: {browsing} Gaming: {gaming}"
             print(f"[WorkStatus]\n{work_status_info}")
 
             self.ws_internal_signal.emit(work_status_info)
