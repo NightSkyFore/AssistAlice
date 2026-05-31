@@ -2,7 +2,7 @@ import json
 import os
 import requests
 
-CONFIG_FILE = "./config/setting.json"
+CONFIG_FILE = "./config/google_setting.json"
 
 class QuickSearch:
     def __init__(self) -> None:
