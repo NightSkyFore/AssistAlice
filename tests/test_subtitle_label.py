@@ -64,5 +64,4 @@ if __name__ == "__main__":
     for s in sentences:
         win.feed_sentence(s)
 
-
     sys.exit(app.exec())
