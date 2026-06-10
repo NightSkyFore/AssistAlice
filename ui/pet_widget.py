@@ -1,9 +1,6 @@
-import os
 import sys
 
-os.environ["QT_QPA_PLATFORM"] = "xcb"
-
-from PySide6.QtWidgets import QApplication, QWidget, QMainWindow
+from PySide6.QtWidgets import QApplication, QWidget
 from PySide6.QtGui import QPixmap, QPainter, QMouseEvent, QWheelEvent
 from PySide6.QtCore import Qt
 
@@ -60,7 +57,7 @@ class DesktopPet(QWidget):
         self.setMask(self.pixmap.mask())
         # force render
         self.update()
-    
+
     def move_to_bottom_right(self):
         screen_geometry = QApplication.primaryScreen().availableGeometry()
         margin_x = 30
@@ -74,12 +71,12 @@ class DesktopPet(QWidget):
         系统会自动调用这个函数。
         """
         painter = QPainter(self)
-        
+
         # 开启抗锯齿（如果你后续对图片进行旋转或缩放，这会让边缘更平滑）
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         # 开启平滑像素变换
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-        
+
         # 在当前 Widget 的 (0, 0) 坐标处，把 pixmap 画上去
         painter.drawPixmap(0, 0, self.pixmap)
 
@@ -91,7 +88,7 @@ class DesktopPet(QWidget):
             if window:
                 window.startSystemMove()
             event.accept()
-    
+
     def wheelEvent(self, event: QWheelEvent):
         if event.modifiers() == Qt.ControlModifier:
             angle = event.angleDelta().y()
@@ -102,11 +99,7 @@ class DesktopPet(QWidget):
             self.scale = max(self.min_scale, min(self.max_scale, self.scale))
             self.update_pet_size()
             event.accept()
-    
-    def mouseDoubleClickEvent(self, event: QMouseEvent):
-        if event.button() == Qt.MouseButton.LeftButton:
-            QApplication.quit()
-    
+
     def on_summary_thinking(self):
         self._current_pixmap = self.raw_pixmap
         self.emotion_change("think")
@@ -123,13 +116,3 @@ class DesktopPet(QWidget):
             print(f"Error: No image!")
             sys.exit(1)
         self.update_pet_size()
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    app.setStyle("Fusion")
-    app.setApplicationName("AIAssistant")
-    win = QMainWindow()
-    win.show()
-    pet = DesktopPet()
-    pet.show()
-    sys.exit(app.exec())

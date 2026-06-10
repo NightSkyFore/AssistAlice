@@ -7,7 +7,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 import threading
 import sounddevice as sd
-from PySide6.QtCore import QThread
+from PySide6.QtCore import QThread, Signal
 
 TTS_MODEL_PATH = {
     "zh": {
@@ -27,6 +27,8 @@ TTS_MODEL_PATH = {
 _POISON_PILL = object()
 
 class MeloTTSWorker(QThread):
+    tts_sentenct_signal = Signal(str)
+
     def __init__(self, tts_queue: queue.Queue, lang: str = "en", tts_cpu: int = 4, **kwargs,):
         super().__init__()
         self.tts_queue = tts_queue
@@ -134,6 +136,7 @@ class MeloTTSWorker(QThread):
     def _generate_audio(self, text):
         try:
             audio_array = self.model.tts_to_file(text, self.speaker, output_path=None, speed=1.0, quiet=True)
+            self.tts_sentenct_signal.emit(text)
             if audio_array is not None:
                 self.play_queue.put(audio_array)
         except Exception as e:

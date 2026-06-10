@@ -12,7 +12,7 @@ from core.input_monitor import InputMonitor
 from core.llm_worker import LLMWorker
 from core.stt_worker import WhisperSTTWorker
 from core.tts_worker import MeloTTSWorker
-from .pet_widget import DesktopPet
+from ui.pet_manager import PetSystemManager
 from .tray_icon import TrayIcon
 
 class MainWindow(QMainWindow):
@@ -22,8 +22,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Alice AI Assistant")
         self.setMinimumSize(900, 600)
 
-        self.pet = DesktopPet()
-        self.pet.hide()
+        self.pet = PetSystemManager()
 
         self.tray = TrayIcon(self)
         self.tray.show()
@@ -64,7 +63,7 @@ class MainWindow(QMainWindow):
         self.moniter.start()
 
         self.first_greeting()
-    
+
     def setup_ui(self):
         # main
         main_widget = QWidget()
@@ -76,20 +75,21 @@ class MainWindow(QMainWindow):
         # left
         left_layout = QVBoxLayout()
         left_layout.setSpacing(15)
-        
+
         self.viewer = AiViewer()
-        
+
         self.mic_btn = QPushButton("🎙️ Microphone Closed")
+        self.mic_btn.setObjectName("mic_btn")
         self.mic_btn.setCheckable(True)
         self.mic_btn.setFixedHeight(45)
         self.mic_btn.setStyleSheet("""
-            QPushButton {
+            #mic_btn {
                 background-color: #3a3a3a;
                 color: white;
                 border-radius: 10px;
                 font-size: 14px;
             }
-            QPushButton:checked {
+            #mic_btn:checked {
                 background-color: #007acc;
                 color: white;
             }
@@ -114,10 +114,10 @@ class MainWindow(QMainWindow):
         self.chat_view = QListView()
         self.model = MessageModel()
         self.delegate = ChatDelegate()
-        
+
         self.chat_view.setModel(self.model)
         self.chat_view.setItemDelegate(self.delegate)
-        
+
         # 样式优化：去掉默认蓝框
         self.chat_view.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.chat_view.setVerticalScrollMode(QListView.ScrollMode.ScrollPerPixel) # 丝滑滚动
@@ -140,16 +140,17 @@ class MainWindow(QMainWindow):
 
         # 发送按钮
         self.send_btn = QPushButton("Send")
+        self.send_btn.setObjectName("send_btn")
         self.send_btn.setFixedHeight(45)
         self.send_btn.setStyleSheet("""
-            QPushButton {
+            #send_btn {
                 background-color: #3a3a3a;
                 color: white;
                 border-radius: 10px;
                 font-size: 14px;
                 padding: 15px;
             }
-            QPushButton:disabled {
+            #send_btn:disabled {
                 background-color: #3a3a3a;
                 color: grey;
             }
@@ -166,7 +167,7 @@ class MainWindow(QMainWindow):
         # ---------- 组装 ----------
         layout.addLayout(left_layout, 1)
         layout.addLayout(right_layout, 2)
-    
+
     # microphone event
     def toggle_microphone(self, checked):
         if checked:
@@ -176,7 +177,7 @@ class MainWindow(QMainWindow):
             self.mic_btn.setText("🎙️ Microphone Closed")
             self.stop_stt()
         self.tray.change_status(checked)
-    
+
     def start_stt(self):
         self.stt_worker = WhisperSTTWorker(**self._custom_config)
         self.stt_worker.text_signal.connect(self.on_voice_input)
@@ -191,15 +192,17 @@ class MainWindow(QMainWindow):
     def on_voice_input(self, text):
         self._draft_buffer += text
         self.input_edit.setPlainText(self._draft_buffer)
+        
+        self.pet.osd_on_text(text)
 
     def handle_silence(self, time_duration):
-        if not self._draft_buffer.strip() or time_duration < 3.0:
+        if not self._draft_buffer.strip() or time_duration < 2.0:
             return
 
         # when llm is busy, keep recording
         if self._llm_busy:
             return
-        
+
         final_text = self._draft_buffer
         self._draft_buffer = "" 
         self.handle_send(final_text)
@@ -249,8 +252,8 @@ class MainWindow(QMainWindow):
         self.llm_queue.put({"type": "chat", "msg": messages})
 
     def on_llm_emotion(self, emotion):
-        self.pet.emotion_change(emotion)
-    
+        self.pet.pet_emotion_change(emotion)
+
     def on_llm_word(self, word):
         # update chat_view
         if self.model.messages[self.thinking_index]['msg_type'] == 'loading':
@@ -283,21 +286,21 @@ class MainWindow(QMainWindow):
         self.model.add_message(f"[LLM Error] {error_msg}", False, 'system')
         self.model.layoutChanged.emit()
         self.set_ui_busy(False)
-    
+
     def trigger_background_summary(self, user_status = ""):
-        self.pet.on_summary_thinking()
+        self.pet.pet_on_summary_thinking()
 
         history_content = self.dialog_manager.build_to_summarize()
         if user_status:
             history_content = f"{history_content}\n\n{user_status}"
         self.llm_queue.put({"type": "summarize", "msg": history_content})
-    
+
     def on_summary_done(self, new_summary: str):
         self.dialog_manager.update_summary(new_summary)
         cur_time = datetime.strftime(datetime.now(), "%Y-%m-%D %H:%M:%S")
         print(f"[{cur_time}] Summarize done")
 
-        self.pet.on_summary_finish()
+        self.pet.pet_on_summary_finish()
         self.set_ui_busy(False)
 
     def set_ui_busy(self, busy: bool):
@@ -306,6 +309,10 @@ class MainWindow(QMainWindow):
         self.input_edit.toggle_send_enabled(not busy)
         self.send_btn.setEnabled(not busy)
     
+    # tts to subtitle
+    def on_tts_sentence(self, text: str):
+        self.pet.osd_on_text(text)
+
     # input moniter
     def on_reminding(self, message):
         self.tts_queue.put(message)
@@ -329,16 +336,16 @@ class MainWindow(QMainWindow):
             self.dialog_manager.close_mem()
 
             QApplication.quit()
-    
+
     def show_main_from_tray(self):
-        self.pet.hide()
+        self.pet.hide_system()
         self.showNormal()
         self.activateWindow()
-    
+
     def show_pet_mode(self):
         self.hide()
-        self.pet.show()
-    
+        self.pet.show_system()
+
     def quit_from_tray(self):
         self._actually_quit = True
         self.close()
@@ -416,11 +423,11 @@ class ChatDelegate(QStyledItemDelegate):
         doc = QTextDocument()
         doc.setDefaultFont(font)
         doc.setPlainText(text)
-        
+
         # 限制文本最大宽度
         max_width = option.rect.width() - self.margin - (self.padding * 2)
         doc.setTextWidth(max_width)
-        
+
         text_size = doc.size()
         bubble_width = text_size.width() + self.padding * 2
         bubble_height = text_size.height() + self.padding * 2
@@ -459,7 +466,7 @@ class ChatDelegate(QStyledItemDelegate):
         font.setPointSize(10)
         doc.setDefaultFont(font)
         doc.setPlainText(text)
-        
+
         # 这里的宽度要和 paint 保持一致
         doc.setTextWidth(option.rect.width() - self.margin - (self.padding * 2))
         return QSize(option.rect.width(), doc.size().height() + 20)
@@ -500,11 +507,3 @@ class ChatInputArea(QPlainTextEdit):
 
     def toggle_send_enabled(self, enable_send: bool):
         self._enable_key_send = enable_send
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    app.setStyle("Fusion")
-    app.setApplicationName("AIAssistant")
-    win = MainWindow()
-    win.show()
-    sys.exit(app.exec())

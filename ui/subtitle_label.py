@@ -36,6 +36,7 @@ class SubtitleLabel(QWidget):
         self._last_line_count = 0
         self._render_start_line = 0
         self._text_process(False)
+        self.update()
 
     def _set_stoke_width(self):
         if self.font_size < 10:
