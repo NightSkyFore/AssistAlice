@@ -44,6 +44,7 @@ class MainWindow(QMainWindow):
 
         self.alice = AliceAI(**custom_config)
         self.llm_worker = LLMWorker(self.alice, self.llm_queue)
+        self.llm_worker.emotion_signal.connect(self.on_llm_emotion)
         self.llm_worker.word_signal.connect(self.on_llm_word)
         self.llm_worker.sentence_signal.connect(self.on_llm_sentence)
         self.llm_worker.finished_signal.connect(self.on_llm_reply)
@@ -54,6 +55,7 @@ class MainWindow(QMainWindow):
         self.stt_worker = None
 
         self.tts_worker = MeloTTSWorker(self.tts_queue, **custom_config)
+        self.tts_worker.tts_sentence_signal.connect(self.on_tts_sentence)
         self.tts_worker.start()
 
         self.moniter = InputMonitor(**custom_config)
