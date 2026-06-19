@@ -11,7 +11,7 @@ WHISPER_MODEL_PATH = {
 
 class WhisperSTTWorker(QThread):
     text_signal = Signal(str)
-    silence_duration_signal = Signal(float)
+    silence_duration_signal = Signal()
 
     def __init__(self, stt_model_size: str = "small", lang: str = "en", stt_cpu: int = 2, **kwargs,):
         super().__init__()
@@ -19,7 +19,9 @@ class WhisperSTTWorker(QThread):
         self.sample_rate = 16000
         # 能量阈值：低于此值视为静音。根据环境噪音调整，通常在 0.005 - 0.02 之间
         self.volume_threshold = 0.005 
-        
+        self.min_silence = 0.8
+        self.speech_silence = 2.0
+
         self.model = WhisperModel(
             WHISPER_MODEL_PATH[stt_model_size],
             device="cpu", 
@@ -33,10 +35,11 @@ class WhisperSTTWorker(QThread):
             "jp": "これは日本語と英語が混ざった日常会話です。ええと、よく使う言葉：こんにちは、OK、Python、UI、バグ、Linux、Alice、アリス。"
         }
         self.lang = lang if lang in self.transcribe_config.keys() else "en"
-        
+
         self.audio_buffer = []
         self.last_speech_time = time.time()
         self.is_speaking = False
+        self.has_unprocessed_text = False
 
     def run(self):
         self.is_running = True
@@ -50,7 +53,7 @@ class WhisperSTTWorker(QThread):
     def _audio_callback(self, indata, frames, time_info, status):
         if status:
             print(f"[WhisperSTTWorker]Callback Exception: {status}")
-        
+
         audio_data = indata.copy().flatten()
 
         rms = np.sqrt(np.mean(audio_data**2))
@@ -61,12 +64,14 @@ class WhisperSTTWorker(QThread):
         else:
             if self.is_speaking:
                 self.audio_buffer.append(audio_data) # 保留一点尾音
-            
+
             silence_duration = time.time() - self.last_speech_time
-            self.silence_duration_signal.emit(silence_duration)
+            if self.has_unprocessed_text and silence_duration > self.speech_silence:
+                self.silence_duration_signal.emit()
+                self.has_unprocessed_text = False
 
             # 【断句逻辑】：停顿超过 0.8s 且 buffer 里有东西，触发转录。避免攒一堆长句
-            if self.is_speaking and silence_duration > 0.8:
+            if self.is_speaking and silence_duration > self.min_silence:
                 self._trigger_transcription()
                 self.is_speaking = False
 
@@ -86,10 +91,11 @@ class WhisperSTTWorker(QThread):
             condition_on_previous_text=False, 
             temperature=[0.0, 0.2, 0.4]
         )
-        
+
         text = "".join([s.text for s in segments])
         if text.strip():
             self.text_signal.emit(text)
+            self.has_unprocessed_text = True
 
     def stop(self):
         self.is_running = False

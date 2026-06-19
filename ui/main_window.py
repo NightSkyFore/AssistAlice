@@ -197,8 +197,8 @@ class MainWindow(QMainWindow):
         
         self.pet.osd_on_text(text)
 
-    def handle_silence(self, time_duration):
-        if not self._draft_buffer.strip() or time_duration < 2.0:
+    def handle_silence(self):
+        if not self._draft_buffer.strip():
             return
 
         # when llm is busy, keep recording
