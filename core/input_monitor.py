@@ -169,9 +169,9 @@ class WorkStatus(QObject):
         self.status = "Gaming"
 
     def check_too_late(self, cur_time: datetime.time, work_time: datetime.time, sleep_time: datetime.time):
-        if self.time_late(cur_time, work_time, sleep_time) and not self.alarmed and self.status not in ["Leaving", "Rest"]:
+        if self.time_late(cur_time, work_time, sleep_time) and not self.night_alarmed and self.status not in ["Leaving", "Rest"]:
             self.rs_internal_signal.emit("It's too late to sleep!")
-            self.alarmed = True
+            self.night_alarmed = True
 
     def time_late(self, cur_time: datetime.time, work_time: datetime.time, sleep_time: datetime.time) -> bool:
         return (sleep_time > work_time and cur_time > sleep_time) \
