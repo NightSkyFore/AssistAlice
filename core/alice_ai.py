@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 
 from typing import Iterator, Union
-from llama_cpp import CreateChatCompletionResponse, CreateChatCompletionStreamResponse, Llama
+from llama_cpp import GGML_TYPE_Q8_0, CreateChatCompletionResponse, CreateChatCompletionStreamResponse, Llama
 
 from . import custom_tools
 
@@ -84,16 +84,22 @@ class AliceAI:
         self,
         system_prompt: str = DEFAULT_PROMPT,
         llm_cpu: int = 8,
+        gpu_layer: int = 0,
         **kwargs,
     ) -> None:
         self.model_path = MODEL_PATH
 
         llm = Llama(
             model_path=self.model_path,
+            n_gpu_layers=gpu_layer,
             seed=23,
             n_ctx=2048,
             n_threads=llm_cpu,
+            n_threads_batch=llm_cpu,
+            flash_attn=True,
             chat_format="llama-3",
+            type_k=GGML_TYPE_Q8_0,
+            type_v=GGML_TYPE_Q8_0,
             verbose=False
         )
 
@@ -233,17 +239,3 @@ class AliceAI:
 
         print("chat response")
         return res
-
-if __name__ == "__main__":
-    alice = AliceAI()
-    user_messages = []
-    user_messages.append({"role": "user", "content": "how are you today"})
-    print(alice.get_response(user_messages))
-    user_messages.append({"role": "user", "content": "google the latest news."})
-    print(alice.get_response(user_messages))
-    user_messages.append({"role": "user", "content": "google the gold price"})
-    print(alice.get_response(user_messages))
-    user_messages.append({"role": "user", "content": "what's the time now?"})
-    print(alice.get_response(user_messages))
-    user_messages.append({"role": "user", "content": "What's the height of TaiShan?"})
-    print(alice.get_response(user_messages))
