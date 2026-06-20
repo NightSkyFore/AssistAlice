@@ -25,9 +25,14 @@ class LLMWorker(QThread):
         self.llm = llm_instance
         self.msg_queue = msg_queue
 
-        # 断句
+        # tts sentence split in chat
         self.safe_punctuations = set("，。！？；\n!?;")
         self.unsafe_punctuations = set(",.")
+
+        self.is_first_sentence = True
+        self.pos = 0
+        self.word_count = 0
+        self.cjk_count = 0
 
     def run(self):
         while True:
@@ -54,8 +59,13 @@ class LLMWorker(QThread):
         is_parsing_head= True
         head_buffer = ""
         max_head_scan = 15
-        # 状态机：非代码块状态/代码块状态（跳过）
+        # code block status 
         is_inside_code = False
+
+        self.is_first_sentence = True
+        self.pos = 0
+        self.word_count = 0
+        self.cjk_count = 0
 
         try:
             for token in self.llm.generate_stream_response(messages):
@@ -100,19 +110,17 @@ class LLMWorker(QThread):
                     if not is_inside_code:
                         # 状态流转：外部 -> 内部 (刚进入代码块)
                         # 把进入代码块之前的正常文本，强制推给 TTS 断句并朗读
-                        self.flush_buffer_to_tts(before_code, force_flush=True)
+                        self.flush_buffer_to_tts(before_code)
 
                     # 切换状态，并将剩余部分放回 buffer
                     is_inside_code = not is_inside_code
                     tts_buffer = rest
 
                 if not is_inside_code:
-                    sentences, remaining = self.process_buffer(tts_buffer)
-                    for sentence in sentences:
-                        self.emit_clean_sentence(sentence)
-                    tts_buffer = remaining
+                    # normal chat
+                    tts_buffer = self.process_buffer_to_sentence(tts_buffer)
                 else:
-                    # 代码块内，除了反引号（为了凑出下一个 ```），其它内容全丢弃
+                    # inside code block
                     if tts_buffer.endswith("``"):
                         tts_buffer = "``"
                     elif tts_buffer.endswith("`"):
@@ -122,7 +130,7 @@ class LLMWorker(QThread):
 
             # deal with buffer tail 
             if not is_inside_code and tts_buffer:
-                self.flush_buffer_to_tts(tts_buffer, force_flush=True)
+                self.flush_buffer_to_tts(tts_buffer)
 
             self.finished_signal.emit(full_response)
             
@@ -131,49 +139,64 @@ class LLMWorker(QThread):
             print(f"[LLMWorker] {error_msg}")
             self.error_signal.emit(str(e))
 
-    def flush_buffer_to_tts(self, text, force_flush=False):
-        if not text.strip(): 
-            return
-        sentences, remaining = self.process_buffer(text)
-        for s in sentences:
-            self.emit_clean_sentence(s)
-        if force_flush and remaining.strip():
-            self.emit_clean_sentence(remaining)
-
-    def emit_clean_sentence(self, sentence):
-        clean = sentence.strip()
+    def flush_buffer_to_tts(self, buffer):
+        if self.is_first_sentence:
+            self.is_first_sentence = False
+        self.pos = 0
+        self.word_count = 0
+        self.cjk_count = 0
+        clean = buffer.strip()
         # deal with inline code
         clean = clean.replace('`', '') 
         if clean:
             self.sentence_signal.emit(clean)
+    
+    def process_buffer_to_sentence(self, buffer):
+        """
+        Divide large text into long sentence block. 
+        more than 10 words(splited by blank) in English or more than 20 char in CJK
+        """
+        i = self.pos
+        current_sentence = buffer[:i]
 
-    def process_buffer(self, buffer):
-        sentences = []
-        current_sentence = ""
-        i = 0
-        
+        has_flush = False
+        stop_words = 5 if self.is_first_sentence else 10
+        stop_cjk_chars = 6 if self.is_first_sentence else 20
+
         while i < len(buffer):
             char = buffer[i]
             current_sentence += char
-            
+
+            if char == ' ':
+                self.word_count += 1
+            elif "\u4e00" <= char <= "\u9fff":
+                self.cjk_count += 1
+
+            if self.word_count < stop_words and self.cjk_count < stop_cjk_chars:
+                i += 1
+                continue
+
             if char in self.safe_punctuations:
-                sentences.append(current_sentence)
-                current_sentence = ""
+                self.flush_buffer_to_tts(current_sentence)
+                has_flush = True
+                current_sentence = buffer[i+1:]
+                break
             # deal with long number like: 4,630.50
             elif char in self.unsafe_punctuations:
                 if i + 1 < len(buffer):
                     next_char = buffer[i + 1]
                     if not next_char.isdigit():
-                        sentences.append(current_sentence)
-                        current_sentence = ""
-                else:
-                    current_sentence = current_sentence[:-1]
-                    break 
+                        self.flush_buffer_to_tts(current_sentence)
+                        has_flush = False
+                        current_sentence = buffer[i+1:]
+                        break
             i += 1
             
-        remaining_buffer = current_sentence + buffer[i:]
-        return sentences, remaining_buffer
-    
+        remaining_buffer = current_sentence
+        if not has_flush:
+            self.pos = i
+        return remaining_buffer
+
     def summarize(self, content: str):
         try:
             new_summary = self.llm.get_summary_response(content)
