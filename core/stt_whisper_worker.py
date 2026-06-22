@@ -10,8 +10,18 @@ WHISPER_MODEL_PATH = {
 }
 
 class WhisperSTTWorker(QThread):
+    """
+    It's reserved as optional if anyone want to use for another test.
+    Execute `pip install faster_whisper` and then change the code in main_window.py as following:
+
+        def start_stt(self):
+            self.stt_worker = WhisperSTTWorker(**self._custom_config)
+            self.stt_worker.text_signal.connect(self.on_vad_voice_input)
+            self.stt_worker.speech_silence_signal.connect(self.handle_silence)
+            self.stt_worker.start()
+    """
     text_signal = Signal(str)
-    silence_duration_signal = Signal()
+    speech_silence_signal = Signal()
 
     def __init__(self, stt_model_size: str = "small", lang: str = "en", stt_cpu: int = 2, **kwargs,):
         super().__init__()
@@ -19,8 +29,8 @@ class WhisperSTTWorker(QThread):
         self.sample_rate = 16000
         # 能量阈值：低于此值视为静音。根据环境噪音调整，通常在 0.005 - 0.02 之间
         self.volume_threshold = 0.005 
-        self.min_silence = 0.8
-        self.speech_silence = 2.0
+        self.min_silence = 0.5
+        self.speech_silence = 2.4
 
         self.model = WhisperModel(
             WHISPER_MODEL_PATH[stt_model_size],
@@ -67,7 +77,7 @@ class WhisperSTTWorker(QThread):
 
             silence_duration = time.time() - self.last_speech_time
             if self.has_unprocessed_text and silence_duration > self.speech_silence:
-                self.silence_duration_signal.emit()
+                self.speech_silence_signal.emit()
                 self.has_unprocessed_text = False
 
             # 【断句逻辑】：停顿超过 0.8s 且 buffer 里有东西，触发转录。避免攒一堆长句

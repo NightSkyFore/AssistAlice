@@ -10,7 +10,11 @@ from core.alice_ai import AliceAI
 from core.dialog_manager import DialogManager
 from core.input_monitor import InputMonitor
 from core.llm_worker import LLMWorker
-from core.stt_worker import WhisperSTTWorker
+from core.stt_nemotron_worker import NemotronWorker
+from core.stt_reazon_worker import ReazonSTTWorker
+from core.stt_sense_worker import SenseVoiceSTTWorker
+from core.stt_streaming_worker import StreamingZipformerWorker, XASRStreamingWorker
+from core.stt_whisper_worker import WhisperSTTWorker
 from core.tts_worker import MeloTTSWorker
 from ui.pet_manager import PetSystemManager
 from .tray_icon import TrayIcon
@@ -174,16 +178,28 @@ class MainWindow(QMainWindow):
     def toggle_microphone(self, checked):
         if checked:
             self.mic_btn.setText("🔴 Listening...")
-            self.start_stt()
+            self.start_stt(**self._custom_config)
         else:
             self.mic_btn.setText("🎙️ Microphone Closed")
             self.stop_stt()
         self.tray.change_status(checked)
 
-    def start_stt(self):
-        self.stt_worker = WhisperSTTWorker(**self._custom_config)
-        self.stt_worker.text_signal.connect(self.on_voice_input)
-        self.stt_worker.silence_duration_signal.connect(self.handle_silence)
+    def start_stt(self, lang: str = "zh_mix", stt_cpu: int = 2):
+        if lang == "zh_mix":
+            self.stt_worker = XASRStreamingWorker(stt_cpu)
+            self.stt_worker.text_signal.connect(self.on_streaming_voice_input)
+        elif lang == "en":
+            self.stt_worker = NemotronWorker(lang, stt_cpu)
+            self.stt_worker.text_signal.connect(self.on_streaming_voice_input)
+        elif lang == "ja":
+            self.stt_worker = ReazonSTTWorker(stt_cpu)
+            self.stt_worker.text_signal.connect(self.on_vad_voice_input)
+        else:
+            # Note that the pure Chinese as 'zh' is using SenseVoice
+            self.stt_worker = SenseVoiceSTTWorker(lang, stt_cpu)
+            self.stt_worker.text_signal.connect(self.on_vad_voice_input)
+ 
+        self.stt_worker.speech_silence_signal.connect(self.handle_silence)
         self.stt_worker.start()
 
     def stop_stt(self):
@@ -191,7 +207,13 @@ class MainWindow(QMainWindow):
             self.stt_worker.stop()
             self.stt_worker = None
 
-    def on_voice_input(self, text):
+    def on_streaming_voice_input(self, text):
+        self._draft_buffer = text
+        self.input_edit.setPlainText(self._draft_buffer)
+        
+        self.pet.osd_on_streaming(text)
+
+    def on_vad_voice_input(self, text):
         self._draft_buffer += text
         self.input_edit.setPlainText(self._draft_buffer)
         

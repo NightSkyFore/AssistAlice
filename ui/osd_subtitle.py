@@ -67,7 +67,13 @@ class OSDTextWindow(QWidget):
         target_y = screen_geometry.height() - self.height() - margin
         self.move(target_x, target_y)
 
+    def feed_streaming(self, text):
+        self.hide_timer.stop()
+        self.label.set_text(text)
+        self.hide_timer.start(self._display_time_ms)
+
     def feed_sentence(self, sentence: str):
+        """A builtin streaming typer for sentence input"""
         self.hide_timer.stop()
         self.char_queue.extend(sentence)
 

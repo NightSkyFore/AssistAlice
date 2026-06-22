@@ -31,5 +31,8 @@ class PetSystemManager(QObject):
     def pet_emotion_change(self, emotion):
         self.pet.emotion_change(emotion)
 
+    def osd_on_streaming(self, text: str):
+        self.osd.feed_streaming(text)
+
     def osd_on_text(self, text: str):
         self.osd.feed_sentence(text)
