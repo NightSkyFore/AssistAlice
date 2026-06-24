@@ -13,9 +13,8 @@ from core.llm_worker import LLMWorker
 from core.stt_nemotron_worker import NemotronWorker
 from core.stt_reazon_worker import ReazonSTTWorker
 from core.stt_sense_worker import SenseVoiceSTTWorker
-from core.stt_streaming_worker import StreamingZipformerWorker, XASRStreamingWorker
-from core.stt_whisper_worker import WhisperSTTWorker
-from core.tts_worker import MeloTTSWorker
+from core.stt_streaming_worker import XASRStreamingWorker
+from core.tts_melo_worker import MeloTTSWorker
 from ui.pet_manager import PetSystemManager
 from .tray_icon import TrayIcon
 
@@ -184,7 +183,7 @@ class MainWindow(QMainWindow):
             self.stop_stt()
         self.tray.change_status(checked)
 
-    def start_stt(self, lang: str = "zh_mix", stt_cpu: int = 2):
+    def start_stt(self, lang: str = "zh_mix", stt_cpu: int = 2, **kwargs,):
         if lang == "zh_mix":
             self.stt_worker = XASRStreamingWorker(stt_cpu)
             self.stt_worker.text_signal.connect(self.on_streaming_voice_input)
@@ -351,11 +350,10 @@ class MainWindow(QMainWindow):
             self.show_pet_mode()
             e.ignore()
         else:
-            if self.stt_worker:
-                self.stt_worker.stop()
+            self.moniter.stop()
+            self.stop_stt()
             self.llm_worker.stop()
             self.tts_worker.stop()
-            self.moniter.stop()
 
             self.dialog_manager.close_mem()
 
