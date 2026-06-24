@@ -23,7 +23,7 @@ class ReazonSTTWorker(QThread):
 
         self.recognizer = sherpa_onnx.OfflineRecognizer.from_transducer(
             encoder=f"{REAZONSPEECH_MODEL_PATH}/encoder-epoch-99-avg-1.int8.onnx",
-            decoder=f"{REAZONSPEECH_MODEL_PATH}/dencoder-epoch-99-avg-1.int8.onnx",
+            decoder=f"{REAZONSPEECH_MODEL_PATH}/decoder-epoch-99-avg-1.int8.onnx",
             joiner=f"{REAZONSPEECH_MODEL_PATH}/joiner-epoch-99-avg-1.int8.onnx",
             tokens=f"{REAZONSPEECH_MODEL_PATH}/tokens.txt",
             num_threads=stt_cpu,
@@ -43,6 +43,8 @@ class ReazonSTTWorker(QThread):
         self.last_speech_time = time.time()
         self.is_speaking = False
         self.has_unprocessed_text = False
+
+        print(f"[ReazonSpeech]Ready with {stt_cpu} CPUs...")
 
     def run(self):
         with sd.InputStream(samplerate=self.sample_rate, 
@@ -108,5 +110,5 @@ class ReazonSTTWorker(QThread):
             self.has_unprocessed_text = True
 
     def stop(self):
-        self.msg_queue.put(_POISON_PILL)
+        self.audio_queue.put(_POISON_PILL)
         self.wait()

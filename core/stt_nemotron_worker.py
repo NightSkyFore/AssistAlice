@@ -12,6 +12,7 @@ class NemotronWorker(QThread):
     speech_silence_signal = Signal()
 
     def __init__(self, lang: str = "en", stt_cpu: int = 2, **kwargs,):
+        super().__init__()
         self.sample_rate = 16000
 
         self.recognizer = sherpa_onnx.OnlineRecognizer.from_transducer(
@@ -34,6 +35,8 @@ class NemotronWorker(QThread):
         self.stream.set_option("language", lang)
         self.last_text = ""
         self.audio_queue = queue.Queue()
+
+        print(f"[Nemotron]Ready with {stt_cpu} CPUs...")
 
     def run(self):
         with sd.InputStream(samplerate=self.sample_rate, 
@@ -77,5 +80,5 @@ class NemotronWorker(QThread):
             self.last_text = ""
 
     def stop(self):
-        self.msg_queue.put(_POISON_PILL)
+        self.audio_queue.put(_POISON_PILL)
         self.wait()

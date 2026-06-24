@@ -69,6 +69,10 @@ class OSDTextWindow(QWidget):
 
     def feed_streaming(self, text):
         self.hide_timer.stop()
+
+        if self.opacity_effect.opacity() < 1.0:
+            self.fade_in()
+
         self.label.set_text(text)
         self.hide_timer.start(self._display_time_ms)
 

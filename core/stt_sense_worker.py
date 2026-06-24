@@ -43,6 +43,8 @@ class SenseVoiceSTTWorker(QThread):
         self.is_speaking = False
         self.has_unprocessed_text = False
 
+        print(f"[SenseVoice]Ready with {stt_cpu} CPUs...")
+
     def run(self):
         with sd.InputStream(samplerate=self.sample_rate, 
                             channels=1, 
@@ -107,5 +109,5 @@ class SenseVoiceSTTWorker(QThread):
             self.has_unprocessed_text = True
 
     def stop(self):
-        self.msg_queue.put(_POISON_PILL)
+        self.audio_queue.put(_POISON_PILL)
         self.wait()
