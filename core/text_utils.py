@@ -82,7 +82,7 @@ def timer_replacer(match):
     cur_text = group_dict.get('hm')
     if cur_text:
         time_num_list = cur_text.split(':')
-        return f"{time_num_list[0]} {time_num_list[1]}"
+        return f"{time_num_list[0]}、{time_num_list[1]}"
        
     return match.group(0) 
 
@@ -149,6 +149,18 @@ def formating_percent_in_text(text: str) -> str:
     return PERCENT_SEMANTIC_REG.sub(lambda m: f"百分之{m[1]}", text)
 
 
+# ==== Punc for Chinese ====
+PUNCT_MAP = {
+    "：": "、",
+    "——": "、",
+    "；": "，",
+}
+def punctuations_clean(text: str) -> str:
+    for k, v in PUNCT_MAP.items():
+        text = text.replace(k, v)
+    return text
+
+
 def preprocess_text_for_zh_TTS(text):
     if text_contains_number(text):
         text = formating_number_in_text(text, "zh")
@@ -160,7 +172,7 @@ def preprocess_text_for_zh_TTS(text):
         text = formating_slash_in_text(text)
     if "%" in text:
         text = formating_percent_in_text(text)
-    return text
+    return punctuations_clean(text)
 
 
 if __name__ == "__main__":
