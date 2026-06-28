@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
 
+import multiprocessing
 from typing import Iterator, Union
 from llama_cpp import GGML_TYPE_Q8_0, CreateChatCompletionResponse, CreateChatCompletionStreamResponse, Llama
 
@@ -89,13 +90,15 @@ class AliceAI:
     ) -> None:
         self.model_path = MODEL_PATH
 
+        self._check_cpu_threads_param(gpu_layer, llm_cpu)
+
         llm = Llama(
             model_path=self.model_path,
             n_gpu_layers=gpu_layer,
             seed=23,
             n_ctx=2048,
-            n_threads=llm_cpu,
-            n_threads_batch=llm_cpu,
+            n_threads=self.n_threads,
+            n_threads_batch=self.n_threads_batch,
             flash_attn=True,
             chat_format="llama-3",
             type_k=GGML_TYPE_Q8_0,
@@ -106,7 +109,23 @@ class AliceAI:
         self.system_prompt = system_prompt
         print(f"System Prompts:\n{self.system_prompt}")
         self.llm = llm
-        print(f"[Alice]LLM Ready with {llm_cpu} CPUs...")
+        print(f"[Alice]LLM Ready with n_threads:{self.n_threads}, n_threads_batch:{self.n_threads_batch}...")
+
+    def _check_cpu_threads_param(self, gpu_layer, llm_cpu):
+        cpu_count = multiprocessing.cpu_count()
+        half_cpu_count = max(cpu_count // 2, 1)
+        if gpu_layer != 0:
+            # with layer offload to GPU, CPU is less in use.
+            self.n_threads = min(half_cpu_count, llm_cpu)
+        else:
+            # use as more as CPUs in cpu mode, in generally, half of cores is the best.
+            self.n_threads = min(cpu_count, llm_cpu)
+            if llm_cpu > half_cpu_count:
+                print(f"Current start with {self.n_threads} CPUs, it's recomended to set to [{half_cpu_count}].")
+            elif llm_cpu > cpu_count:
+                print(f"Current start with {self.n_threads} CPUs as max, param 'llm_cpu' is invalid.")
+        # use as more as CPUs for prompts batch, leave 4 CPUs for STT and TTS if possible.
+        self.n_threads_batch = max(max(cpu_count - 4, 1), half_cpu_count)
 
     def get_response(self, user_messages: list) -> str:
         chat_temperature = 0.6
