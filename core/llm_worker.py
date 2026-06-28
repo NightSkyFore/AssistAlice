@@ -187,15 +187,18 @@ class LLMWorker(QThread):
                     next_char = buffer[i + 1]
                     if not next_char.isdigit():
                         self.flush_buffer_to_tts(current_sentence)
-                        has_flush = False
+                        has_flush = True
                         current_sentence = buffer[i+1:]
                         break
+                # step back before punctuation for processing in next token
+                else:
+                    self.pos = i - 1
+                    return current_sentence
             i += 1
-            
-        remaining_buffer = current_sentence
+
         if not has_flush:
             self.pos = i
-        return remaining_buffer
+        return current_sentence
 
     def summarize(self, content: str):
         try:
