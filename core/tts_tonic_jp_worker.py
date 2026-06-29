@@ -5,36 +5,35 @@ import sounddevice as sd
 import sherpa_onnx
 from PySide6.QtCore import QThread, Signal
 
-from core.text_utils import preprocess_text_for_zh_TTS
-
-MELO_MODEL_PATH = "./model/tts-model/vits-melo-tts-zh_en"
+TONIC_MODEL_PATH = "./model/tts-model/sherpa-onnx-supertonic-3-tts-int8-2026-05-11"
 
 _POISON_PILL = object()
 
-class MeloTTSWorker(QThread):
+class TonicTTSWorker(QThread):
     tts_sentence_signal = Signal(str)
 
-    def __init__(self, tts_queue: queue.Queue, tts_cpu: int = 4, **kwargs,):
+    def __init__(self, tts_queue: queue.Queue, tts_cpu: int = 3, **kwargs,):
         super().__init__()
         self.tts_queue = tts_queue
 
         self.play_queue = queue.Queue()
         self.play_thread = None
 
-        rule_fsts_string = f"{MELO_MODEL_PATH}/date.fst,{MELO_MODEL_PATH}/number.fst,{MELO_MODEL_PATH}/new_heteronym.fst,{MELO_MODEL_PATH}/phone.fst"
-
         config = sherpa_onnx.OfflineTtsConfig(
             model=sherpa_onnx.OfflineTtsModelConfig(
-                vits=sherpa_onnx.OfflineTtsVitsModelConfig(
-                    model=f"{MELO_MODEL_PATH}/model.onnx",
-                    tokens=f"{MELO_MODEL_PATH}/tokens.txt",
-                    lexicon=f"{MELO_MODEL_PATH}/lexicon.txt"
+                supertonic=sherpa_onnx.OfflineTtsSupertonicModelConfig(
+                    duration_predictor=f"{TONIC_MODEL_PATH}/duration_predictor.int8.onnx",
+                    text_encoder=f"{TONIC_MODEL_PATH}/text_encoder.int8.onnx",
+                    vector_estimator=f"{TONIC_MODEL_PATH}/vector_estimator.int8.onnx",
+                    vocoder=f"{TONIC_MODEL_PATH}/vocoder.int8.onnx",
+                    tts_json=f"{TONIC_MODEL_PATH}/tts.json",
+                    unicode_indexer=f"{TONIC_MODEL_PATH}/unicode_indexer.bin",
+                    voice_style=f"{TONIC_MODEL_PATH}/voice.bin",
                 ),
+                debug=False,
                 num_threads=tts_cpu,
-                debug=False, 
+                provider="cpu",
             ),
-            rule_fsts=rule_fsts_string, 
-            max_num_sentences=1,
         )
 
         if not config.validate():
@@ -42,9 +41,15 @@ class MeloTTSWorker(QThread):
         self.tts = sherpa_onnx.OfflineTts(config)
         self.sample_rate = self.tts.sample_rate
 
+        self.gen_config = sherpa_onnx.GenerationConfig()
+        self.gen_config.sid = 0
+        self.gen_config.num_steps = 8
+        self.gen_config.speed = 1.0
+        self.gen_config.extra["lang"] = "ja"
+
         self._start_playback_thread()
 
-        print(f"[TTSWorker]Melo ready with {tts_cpu} CPUs...")
+        print(f"[TTSWorker]VITS-en ready with {tts_cpu} CPUs...")
 
     def run(self):
         while True:
@@ -87,7 +92,7 @@ class MeloTTSWorker(QThread):
 
                                 try:
                                     chunk = self.play_queue.get(timeout=0.5)
-
+                                    
                                     if chunk is _POISON_PILL:
                                         self.play_queue.task_done()
                                         return
@@ -97,7 +102,7 @@ class MeloTTSWorker(QThread):
                 except Exception as e:
                     print(f"[PlayWorker]Audio Exception: {e}")
                     continue
-
+                        
         self.play_thread = threading.Thread(target=play_worker, daemon=True)
         self.play_thread.start()
 
@@ -106,8 +111,7 @@ class MeloTTSWorker(QThread):
         if not text:
             return
 
-        tts_text = preprocess_text_for_zh_TTS(text)
-        audio_generated = self.tts.generate(tts_text, sid=0, speed=1.0)
+        audio_generated = self.tts.generate(text, self.gen_config)
 
         self.tts_sentence_signal.emit(text)
 

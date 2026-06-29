@@ -5,35 +5,30 @@ import sounddevice as sd
 import sherpa_onnx
 from PySide6.QtCore import QThread, Signal
 
-from core.text_utils import preprocess_text_for_zh_TTS
-
-MELO_MODEL_PATH = "./model/tts-model/vits-melo-tts-zh_en"
+VITS_MODEL_PATH = "./model/tts-model/vits-piper-en_US-amy-medium"
 
 _POISON_PILL = object()
 
-class MeloTTSWorker(QThread):
+class VitsTTSWorker(QThread):
     tts_sentence_signal = Signal(str)
 
-    def __init__(self, tts_queue: queue.Queue, tts_cpu: int = 4, **kwargs,):
+    def __init__(self, tts_queue: queue.Queue, tts_cpu: int = 2, **kwargs,):
         super().__init__()
         self.tts_queue = tts_queue
 
         self.play_queue = queue.Queue()
         self.play_thread = None
 
-        rule_fsts_string = f"{MELO_MODEL_PATH}/date.fst,{MELO_MODEL_PATH}/number.fst,{MELO_MODEL_PATH}/new_heteronym.fst,{MELO_MODEL_PATH}/phone.fst"
-
         config = sherpa_onnx.OfflineTtsConfig(
             model=sherpa_onnx.OfflineTtsModelConfig(
                 vits=sherpa_onnx.OfflineTtsVitsModelConfig(
-                    model=f"{MELO_MODEL_PATH}/model.onnx",
-                    tokens=f"{MELO_MODEL_PATH}/tokens.txt",
-                    lexicon=f"{MELO_MODEL_PATH}/lexicon.txt"
+                    model=f"{VITS_MODEL_PATH}/en_US-amy-medium.onnx",
+                    tokens=f"{VITS_MODEL_PATH}/tokens.txt",
+                    data_dir=f"{VITS_MODEL_PATH}/espeak-ng-data",
                 ),
                 num_threads=tts_cpu,
                 debug=False, 
             ),
-            rule_fsts=rule_fsts_string, 
             max_num_sentences=1,
         )
 
@@ -44,7 +39,7 @@ class MeloTTSWorker(QThread):
 
         self._start_playback_thread()
 
-        print(f"[TTSWorker]Melo ready with {tts_cpu} CPUs...")
+        print(f"[TTSWorker]VITS-en ready with {tts_cpu} CPUs...")
 
     def run(self):
         while True:
@@ -106,8 +101,7 @@ class MeloTTSWorker(QThread):
         if not text:
             return
 
-        tts_text = preprocess_text_for_zh_TTS(text)
-        audio_generated = self.tts.generate(tts_text, sid=0, speed=1.0)
+        audio_generated = self.tts.generate(text, sid=0, speed=1.0)
 
         self.tts_sentence_signal.emit(text)
 

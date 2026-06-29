@@ -15,8 +15,10 @@ from core.stt_reazon_worker import ReazonSTTWorker
 from core.stt_sense_worker import SenseVoiceSTTWorker
 from core.stt_streaming_worker import XASRStreamingWorker
 from core.tts_melo_worker import MeloTTSWorker
+from core.tts_tonic_jp_worker import TonicTTSWorker
+from core.tts_vits_en_worker import VitsTTSWorker
 from ui.pet_manager import PetSystemManager
-from .tray_icon import TrayIcon
+from ui.tray_icon import TrayIcon
 
 class MainWindow(QMainWindow):
     def __init__(self, custom_config: dict = {}):
@@ -57,7 +59,7 @@ class MainWindow(QMainWindow):
 
         self.stt_worker = None
 
-        self.tts_worker = MeloTTSWorker(self.tts_queue, **custom_config)
+        self.tts_worker = self.init_tts(**custom_config)
         self.tts_worker.tts_sentence_signal.connect(self.on_tts_sentence)
         self.tts_worker.start()
 
@@ -229,6 +231,15 @@ class MainWindow(QMainWindow):
         final_text = self._draft_buffer
         self._draft_buffer = "" 
         self.handle_send(final_text)
+
+    # tts initial
+    def init_tts(self, lang: str = "zh_mix", tts_cpu: int = 4, **kwargs,):
+        if lang == "en":
+            return VitsTTSWorker(self.tts_queue, tts_cpu)
+        elif lang == "ja":
+            return TonicTTSWorker(self.tts_queue, tts_cpu)
+        else:
+            return MeloTTSWorker(self.tts_queue, tts_cpu)
 
     # llm chat event
     def first_greeting(self):
