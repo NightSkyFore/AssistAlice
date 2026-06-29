@@ -1,5 +1,5 @@
 import time
-import datetime
+from datetime import datetime, date, time as dtime
 from PySide6.QtCore import QObject, QThread, Signal
 from pynput import mouse, keyboard
 
@@ -30,8 +30,8 @@ class InputMonitor(QThread):
         self.k_listener = None
         self.m_listener = None
 
-        self.work_time = datetime.datetime.strptime(work_time, "%H:%M").time()
-        self.sleep_time = datetime.datetime.strptime(sleep_time, "%H:%M").time()
+        self.work_time = datetime.strptime(work_time, "%H:%M").time()
+        self.sleep_time = datetime.strptime(sleep_time, "%H:%M").time()
 
     def on_hotkey_triggered(self):
         self.toggle_mic_signal.emit()
@@ -83,7 +83,7 @@ class InputMonitor(QThread):
                     active_step = 0
                 time.sleep(1)
             
-            cur_datetime = datetime.datetime.now()
+            cur_datetime = datetime.now()
             self.status.check_too_late(cur_datetime.time(), self.work_time, self.sleep_time)
             self.status.check_cross_day(cur_datetime.date())
             
@@ -128,7 +128,7 @@ class WorkStatus(QObject):
         super().__init__()
         self.status = "Idle"
         # date
-        self.last_record_date = datetime.datetime.now().date()
+        self.last_record_date = datetime.now().date()
         # work time
         self.coding_time = 0
         self.browsing_time = 0
@@ -168,16 +168,16 @@ class WorkStatus(QObject):
         self.stay_time = 0
         self.status = "Gaming"
 
-    def check_too_late(self, cur_time: datetime.time, work_time: datetime.time, sleep_time: datetime.time):
+    def check_too_late(self, cur_time: dtime, work_time: dtime, sleep_time: dtime):
         if self.time_late(cur_time, work_time, sleep_time) and not self.night_alarmed and self.status not in ["Leaving", "Rest"]:
             self.rs_internal_signal.emit("It's too late to sleep!")
             self.night_alarmed = True
 
-    def time_late(self, cur_time: datetime.time, work_time: datetime.time, sleep_time: datetime.time) -> bool:
+    def time_late(self, cur_time: dtime, work_time: dtime, sleep_time: dtime) -> bool:
         return (sleep_time > work_time and cur_time > sleep_time) \
             or sleep_time < cur_time < work_time
 
-    def check_cross_day(self, cur_date: datetime.date):
+    def check_cross_day(self, cur_date: date):
         if cur_date > self.last_record_date:
             format_minutes = lambda m: f"{m//60}h {m%60}min" if m >= 60 else f"{m}min"
 
