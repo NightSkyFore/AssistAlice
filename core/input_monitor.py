@@ -3,6 +3,20 @@ from datetime import datetime, date, time as dtime
 from PySide6.QtCore import QObject, QThread, Signal
 from pynput import mouse, keyboard
 
+WELCOM_MSG = {
+    "en": "Welcome back! It's {cur_time}.",
+    "ja": "おかえり、今は{cur_time}です。",
+    "zh": "欢迎回来，现在是{cur_time}",
+    "zh_mix": "欢迎回来，现在是{cur_time}",
+}
+
+SLEEP_MSG = {
+    "en": "It's {cur_time} now. It's too late to sleep!",
+    "ja": "今は{cur_time}です、早く寝ますださい。",
+    "zh": "{cur_time}，该去睡觉了。",
+    "zh_mix": "{cur_time}，该去睡觉了。",
+}
+
 class InputMonitor(QThread):
     toggle_mic_signal = Signal()
     # only for TTS reminding
@@ -10,7 +24,7 @@ class InputMonitor(QThread):
     # send to LLM
     work_status_signal = Signal(str)
 
-    def __init__(self, work_time = "9:00", sleep_time = "23:30", **kwargs,):
+    def __init__(self, lang: str = "en", work_time: str = "9:00", sleep_time: str = "23:30", **kwargs,):
         super().__init__()
         self.is_running = True
 
@@ -23,7 +37,7 @@ class InputMonitor(QThread):
             self.on_hotkey_triggered
         )
 
-        self.status = WorkStatus()
+        self.status = WorkStatus(lang)
         self.status.rs_internal_signal.connect(self.forward_rs_signal)
         self.status.ws_internal_signal.connect(self.forward_ws_signal)
         
@@ -37,8 +51,7 @@ class InputMonitor(QThread):
         self.toggle_mic_signal.emit()
 
     def forward_rs_signal(self, msg):
-        cur_time = datetime.now().strftime("%H:%M")
-        self.remind_status_signal.emit(f"It's {cur_time}. {msg}")
+        self.remind_status_signal.emit(msg)
 
     def forward_ws_signal(self, msg):
         self.work_status_signal.emit(f"### User's Daily Context\n{msg}")
@@ -124,8 +137,9 @@ class WorkStatus(QObject):
     rs_internal_signal = Signal(str)
     ws_internal_signal = Signal(str)
 
-    def __init__(self):
+    def __init__(self, lang: str = "en"):
         super().__init__()
+        self.lang = lang if lang in WELCOM_MSG.keys() else "en"
         self.status = "Idle"
         # date
         self.last_record_date = datetime.now().date()
@@ -151,7 +165,10 @@ class WorkStatus(QObject):
 
     def active(self):
         if self.status == "Leaving":
-            self.rs_internal_signal.emit("Welcome back!")
+            cur_time = datetime.now().strftime("%H:%M:%S")
+            msg = WELCOM_MSG[self.lang].format(cur_time=cur_time)
+            self.rs_internal_signal.emit(msg)
+            self.status = "Idle"
 
     def coding(self):
         self.coding_time += 1
@@ -170,7 +187,8 @@ class WorkStatus(QObject):
 
     def check_too_late(self, cur_time: dtime, work_time: dtime, sleep_time: dtime):
         if self.time_late(cur_time, work_time, sleep_time) and not self.night_alarmed and self.status not in ["Leaving", "Rest"]:
-            self.rs_internal_signal.emit("It's too late to sleep!")
+            msg = SLEEP_MSG[self.lang].format(cur_time=cur_time.strftime("%H:%M:%S"))
+            self.rs_internal_signal.emit(msg)
             self.night_alarmed = True
 
     def time_late(self, cur_time: dtime, work_time: dtime, sleep_time: dtime) -> bool:

@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
 
+from datetime import datetime
 import multiprocessing
 from typing import Iterator, Union
 from llama_cpp import GGML_TYPE_Q8_0, CreateChatCompletionResponse, CreateChatCompletionStreamResponse, Llama
@@ -258,3 +259,29 @@ class AliceAI:
 
         print("chat response")
         return res
+
+def init_greeting(lang: str = "en", user_nick: str = None, **kwargs,):
+    greet = {
+        "en": "Wake up! Alice. It's {cur_time} now.",
+        "ja": "アリスさん、おはよう！今は{cur_time}だよ。",
+        "zh": "醒了吗，Alice？早安！现在时间是{cur_time}。",
+        "zh_mix": "醒了吗，Alice？早安！现在时间是{cur_time}。",
+    }
+    greet_with_nick = {
+        "en": "Wake up! Alice. It's {cur_time} now. This is {user_nick} speaking.",
+        "ja": "アリスさん、おはよう！{user_nick}です。今は{cur_time}だよ。",
+        "zh": "醒了吗，Alice？早安！现在时间是{cur_time}，我是{user_nick}。",
+        "zh_mix": "醒了吗，Alice？早安！现在时间是{cur_time}，我是{user_nick}。",
+    }
+    lang = lang if lang in greet.keys() else "en"
+    cur_time = datetime.strftime(datetime.now(), "%H:%M")
+    if user_nick:
+        return [{
+            "role": "user",
+            "content": greet_with_nick[lang].format(cur_time=cur_time, user_nick=user_nick)
+        }]
+    else:
+        return [{
+            "role": "user",
+            "content": greet[lang].format(cur_time=cur_time)
+        }]

@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QApplication, QListView, QMainWindow, QPlainTextEd
 from PySide6.QtCore import QModelIndex, QRectF, QSize, Qt, QAbstractListModel, Signal
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QKeyEvent, QPixmap, QPainter, QTextDocument
 
-from core.alice_ai import AliceAI
+from core.alice_ai import AliceAI, init_greeting
 from core.dialog_manager import DialogManager
 from core.input_monitor import InputMonitor
 from core.llm_worker import LLMWorker
@@ -248,18 +248,8 @@ class MainWindow(QMainWindow):
         self.thinking_index = self.model.rowCount() - 1
         self.set_ui_busy(True)
 
-        cur_time = datetime.strftime(datetime.now(), "%H:%M")
-        if self._custom_config["user_nick"]:
-            init_messages = [{
-                "role": "user",
-                "content": f"Wake up! Alice. It's {cur_time} now. This is {self._custom_config['user_nick']} speaking."
-            }]
-        else:
-            init_messages = [{
-                "role": "user",
-                "content": f"Wake up! Alice. It's {cur_time} now."
-            }]
-        self.llm_queue.put({"type": "chat", "msg": init_messages})
+        messages = init_greeting(**self._custom_config)
+        self.llm_queue.put({"type": "chat", "msg": messages})
 
     def trigger_send_from_button(self):
         text = self.input_edit.toPlainText().strip()
