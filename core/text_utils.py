@@ -1,6 +1,8 @@
 import re
 from num2words import num2words
 
+PUNCTUATIONS = set("，。！？；\n!?;,.")
+
 CJK_RANGE = [
     (0x3040, 0x309F),  # 平假名
     (0x30A0, 0x30FF),  # 片假名

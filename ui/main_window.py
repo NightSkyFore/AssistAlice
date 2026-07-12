@@ -13,6 +13,7 @@ from core.stt_nemotron_worker import NemotronWorker
 from core.stt_reazon_worker import ReazonSTTWorker
 from core.stt_sense_worker import SenseVoiceSTTWorker
 from core.stt_streaming_worker import XASRStreamingWorker
+from core.text_utils import PUNCTUATIONS
 from core.tts_melo_worker import MeloTTSWorker
 from core.tts_play_worker import TTSPlayWorker
 from core.tts_tonic_jp_worker import TonicTTSWorker
@@ -44,7 +45,9 @@ class MainWindow(QMainWindow):
         self._custom_config = custom_config
         self._actually_quit = False
         self._llm_busy = False
-        self._draft_buffer = ""
+
+        self._stt_draft_buffer = ""
+        self._source_code = ""
         self.llm_queue = queue.Queue()
         self.tts_queue = queue.Queue()
 
@@ -233,7 +236,7 @@ class MainWindow(QMainWindow):
             self.stt_worker = ReazonSTTWorker(stt_cpu)
             self.stt_worker.text_signal.connect(self.on_vad_voice_input)
         else:
-            # Note that the pure Chinese as 'zh' and Cantanese as 'yue', using SenseVoice
+            # Note that the pure Chinese as 'zh' and Cantonese as 'yue', using SenseVoice
             self.stt_worker = SenseVoiceSTTWorker(lang, stt_cpu)
             self.stt_worker.text_signal.connect(self.on_vad_voice_input)
  
@@ -247,27 +250,32 @@ class MainWindow(QMainWindow):
             self.stt_worker = None
 
     def on_streaming_voice_input(self, text):
-        self._draft_buffer = text
-        self.input_edit.setPlainText(self._draft_buffer)
+        self._stt_draft_buffer = text
+        self.input_edit.setPlainText(self._stt_draft_buffer)
         
         self.pet.osd_on_streaming(text)
 
     def on_vad_voice_input(self, text):
-        self._draft_buffer += text
-        self.input_edit.setPlainText(self._draft_buffer)
+        self._stt_draft_buffer += text
+        self.input_edit.setPlainText(self._stt_draft_buffer)
         
         self.pet.osd_on_text(text)
 
     def handle_silence(self):
-        if not self._draft_buffer.strip():
+        if not self._stt_draft_buffer.strip():
+            return
+
+        # clean remain punctuation of the last request
+        if self._stt_draft_buffer.strip() in PUNCTUATIONS:
+            self._stt_draft_buffer = ""
             return
 
         # when llm is busy, keep recording
         if self._llm_busy:
             return
 
-        final_text = self._draft_buffer
-        self._draft_buffer = "" 
+        final_text = self._stt_draft_buffer
+        self._stt_draft_buffer = "" 
         self.handle_send(final_text)
 
     # tts initial
