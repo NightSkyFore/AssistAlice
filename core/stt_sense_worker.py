@@ -5,6 +5,8 @@ import sherpa_onnx
 import sounddevice as sd
 from PySide6.QtCore import QThread, Signal
 
+from core.pcm_utils import calculate_volume_level
+
 SENSEVOICE_MODEL_PATH = "./model/stt-model/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09"
 
 VAD_MODEL_PATH = "./model/stt-model/VAD/silero_vad.onnx"
@@ -14,12 +16,14 @@ _POISON_PILL = object()
 class SenseVoiceSTTWorker(QThread):
     text_signal = Signal(str)
     speech_silence_signal = Signal()
+    volume_signal = Signal(float)
 
     def __init__(self, lang: str = "zh", stt_cpu: int = 2, **kwargs,):
         super().__init__()
         self.sample_rate = 16000
         self.min_silence = 0.5
         self.speech_silence = 2.4
+        self.frame_counter = 0
 
         self.recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
             model=f"{SENSEVOICE_MODEL_PATH}/model.int8.onnx",
@@ -67,6 +71,15 @@ class SenseVoiceSTTWorker(QThread):
         if status:
             print(f"[STTWorker] Audio Status Exception: {status}")
         self.audio_queue.put(indata.copy().flatten())
+
+        # voice to wave
+        vol = calculate_volume_level(indata.copy().flatten())
+        if vol < 0.1:
+            return
+        self.frame_counter += 1
+        if self.frame_counter & 3:
+            return
+        self.volume_signal.emit(vol)
 
     def _process_audio_chunk(self, audio_chunk):
         # upscale for normal voice in working

@@ -16,11 +16,10 @@ class VoiceWaveWidget(QWidget):
         # 初始化柱子
         self.amplitudes = [self.min_bar_height] * self.bar_count
         self.wave_color = QColor("#007ACC") 
-        
+
         # 如果音频源断开，用一个定时器让声波平滑回落到 0
         self.decay_timer = QTimer(self)
         self.decay_timer.timeout.connect(self._decay_amplitudes)
-        self.decay_timer.start(50)
 
     @Slot(float)
     def set_amplitude(self, volume: float):
@@ -29,10 +28,13 @@ class VoiceWaveWidget(QWidget):
         """
         # 限制范围并做一点微小的基础保底，确保完全没声音时也有个小点
         val = max(self.min_bar_height, min(1.0, volume)) 
-        
+
         self.amplitudes.pop(0)
         self.amplitudes.append(val)
-        
+
+        if val > self.min_bar_height and not self.decay_timer.isActive():
+            self.decay_timer.start(50)
+
         self.update()
 
     def _decay_amplitudes(self):
@@ -43,13 +45,15 @@ class VoiceWaveWidget(QWidget):
                 needs_update = True
         if needs_update:
             self.update()
+        else:
+            self.decay_timer.stop()
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
         painter.setBrush(self.wave_color)
-        
+
         height = self.height()
         wrap_amp_count = (self.width() - self.bar_space * self.bar_count - self.bar_margin) // self.bar_space // 2
 

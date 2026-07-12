@@ -14,6 +14,7 @@ from core.stt_reazon_worker import ReazonSTTWorker
 from core.stt_sense_worker import SenseVoiceSTTWorker
 from core.stt_streaming_worker import XASRStreamingWorker
 from core.tts_melo_worker import MeloTTSWorker
+from core.tts_play_worker import TTSPlayWorker
 from core.tts_tonic_jp_worker import TonicTTSWorker
 from core.tts_vits_en_worker import VitsTTSWorker
 from ui.main_ai_show import AIShow
@@ -64,7 +65,11 @@ class MainWindow(QMainWindow):
 
         self.tts_worker = self.init_tts(**custom_config)
         self.tts_worker.tts_sentence_signal.connect(self.on_tts_sentence)
+        self.play_worker = TTSPlayWorker(self.tts_worker.sample_rate)
+        self.tts_worker.tts_audio_signal.connect(self.play_worker.put_audio)
+        self.play_worker.volume_signal.connect(self.wave.set_amplitude)
         self.tts_worker.start()
+        self.play_worker.start()
 
         self.moniter = InputMonitor(**custom_config)
         self.moniter.toggle_mic_signal.connect(self.mic_btn.animateClick)
@@ -228,11 +233,12 @@ class MainWindow(QMainWindow):
             self.stt_worker = ReazonSTTWorker(stt_cpu)
             self.stt_worker.text_signal.connect(self.on_vad_voice_input)
         else:
-            # Note that the pure Chinese as 'zh' is using SenseVoice
+            # Note that the pure Chinese as 'zh' and Cantanese as 'yue', using SenseVoice
             self.stt_worker = SenseVoiceSTTWorker(lang, stt_cpu)
             self.stt_worker.text_signal.connect(self.on_vad_voice_input)
  
         self.stt_worker.speech_silence_signal.connect(self.handle_silence)
+        self.stt_worker.volume_signal.connect(self.wave.set_amplitude)
         self.stt_worker.start()
 
     def stop_stt(self):
@@ -387,6 +393,7 @@ class MainWindow(QMainWindow):
             self.stop_stt()
             self.llm_worker.stop()
             self.tts_worker.stop()
+            self.play_worker.stop()
 
             self.dialog_manager.close_mem()
 

@@ -3,6 +3,8 @@ import sounddevice as sd
 import sherpa_onnx
 from PySide6.QtCore import QThread, Signal
 
+from core.pcm_utils import calculate_volume_level
+
 EN_MODEL_PATH = "./model/stt-model/sherpa-onnx-nemotron-3.5-asr-streaming-0.6b-560ms-int8-2026-06-11"
 
 _POISON_PILL = object()
@@ -10,10 +12,12 @@ _POISON_PILL = object()
 class NemotronWorker(QThread):
     text_signal = Signal(str)
     speech_silence_signal = Signal()
+    volume_signal = Signal(float)
 
     def __init__(self, lang: str = "en", stt_cpu: int = 2, **kwargs,):
         super().__init__()
         self.sample_rate = 16000
+        self.frame_counter = 0
 
         self.recognizer = sherpa_onnx.OnlineRecognizer.from_transducer(
             tokens=f"{EN_MODEL_PATH}/tokens.txt",
@@ -60,6 +64,15 @@ class NemotronWorker(QThread):
         if status:
             print(f"[STTWorker] Audio Status Exception: {status}")
         self.audio_queue.put(indata.copy().flatten())
+
+        # voice to wave
+        vol = calculate_volume_level(indata.copy().flatten())
+        if vol < 0.1:
+            return
+        self.frame_counter += 1
+        if self.frame_counter & 3:
+            return
+        self.volume_signal.emit(vol)
 
     def _process_audio_chunk(self, audio_chunk):
         self.stream.accept_waveform(self.sample_rate, audio_chunk)
