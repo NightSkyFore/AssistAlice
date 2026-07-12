@@ -5,6 +5,7 @@ import traceback
 from PySide6.QtCore import QThread, Signal
 
 from core.alice_ai import AliceAI
+from core.text_utils import is_cjk_char
 
 _POISON_PILL = object()
 
@@ -169,7 +170,7 @@ class LLMWorker(QThread):
 
             if char == ' ':
                 self.word_count += 1
-            elif "\u4e00" <= char <= "\u9fff":
+            elif is_cjk_char(char):
                 self.cjk_count += 1
 
             if self.word_count < stop_words and self.cjk_count < stop_cjk_chars:
