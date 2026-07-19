@@ -16,10 +16,9 @@ class TestWindow(QWidget):
         layout = QVBoxLayout(self)
         
         self.chat_view = ChatListView()
-        self.chat_view.remark_code_signal.connect(self.on_source_code)
+        self.chat_view.remark_code_signal.connect(self.on_remark)
         self.model = MessageModel()
         self.delegate = ChatDelegate()
-        self.delegate.code_preview_signal.connect(self.on_source_code)
 
         self.chat_view.setModel(self.model)
         self.chat_view.setItemDelegate(self.delegate)
@@ -33,9 +32,13 @@ class TestWindow(QWidget):
         self.model.add_message("测试系统信息", False, 'system')
         self.model.add_message("测试用户带代码回答: print(True)\nreturn 0", True, source_code="print(True)")
         self.model.add_message("测试AI带代码回答", False, source_code="print(True)")
-    
+
     def on_source_code(self, text):
         print(text)
+
+    def on_remark(self, msg, code):
+        print(msg)
+        print(code)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

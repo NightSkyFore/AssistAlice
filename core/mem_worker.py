@@ -13,7 +13,7 @@ class MemoryWorker(QThread):
     def run(self):
         # watermark of id for everytime new summary insert 
         current_high_watermark = 0
-        
+
         conn = sqlite3.connect(self.db_path)
         conn.execute("PRAGMA journal_mode=WAL;") 
         cursor = conn.cursor()
@@ -30,29 +30,29 @@ class MemoryWorker(QThread):
                 if task is _POISON_PILL:
                     self.db_queue.task_done()
                     break
-                
+
                 if task["action"] == "new_dialog":
                     cursor.execute(
-                        "INSERT INTO dialog_history (role, content) VALUES (?, ?)", 
-                        (task["role"], task["content"])
+                        "INSERT INTO dialog_history (role, content, chat_type, source_code) VALUES (?, ?, ?, ?)", 
+                        (task["role"], task["content"], task["chat_type"], task["source_code"])
                     )
                     current_high_watermark = cursor.lastrowid
                     conn.commit()
-                    
+
                 elif task["action"] == "new_summary":
                     cursor.execute(
                         "INSERT INTO summary (content, last_msg_id) VALUES (?, ?)", 
                         (task["content"], current_high_watermark)
                     )
                     conn.commit()
-                
+
                 self.db_queue.task_done()
-                
+
             except queue.Empty:
                 continue
             except Exception as e:
                 print(f"[MemoryWorker]SQL Write Exception: {e}")
-                
+
         conn.close()
 
     def stop(self):

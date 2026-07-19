@@ -14,7 +14,8 @@ class LLMWorker(QThread):
     emotion_signal = Signal(str)
     word_signal = Signal(str)
     sentence_signal = Signal(str)
-    finished_signal = Signal(str)
+    # chat_view update:[chat_type, text]
+    finished_signal = Signal(str, str)
 
     # background sumarize
     summary_finished_signal = Signal(str)
@@ -44,16 +45,16 @@ class LLMWorker(QThread):
                     self.msg_queue.task_done()
                     break
 
-                if task["type"] == "chat":
-                    self.chat(task["msg"])
+                if task["type"] in ["chat", "code"]:
+                    self.chat(task["msg"], task["type"])
                 elif task["type"] == "summarize":
                     self.summarize(task["msg"])
-                
+
                 self.msg_queue.task_done()
             except queue.Empty:
                 continue
 
-    def chat(self, messages: list):
+    def chat(self, messages: list, chat_type: str = "chat"):
         tts_buffer = ""
         full_response = ""
         # emotion head parsing status
@@ -69,11 +70,11 @@ class LLMWorker(QThread):
         self.cjk_count = 0
 
         try:
-            for token in self.llm.generate_stream_response(messages):
+            for token in self.llm.generate_stream_response(messages, chat_type):
                 full_response += token
 
-                # parse head emotion like [smile] until meet a "]"
-                if is_parsing_head:
+                # for general chat, parse head emotion like [smile] until meet a "]"
+                if chat_type == "chat" and is_parsing_head:
                     head_buffer += token
                     
                     if "]" in head_buffer:
@@ -133,7 +134,7 @@ class LLMWorker(QThread):
             if not is_inside_code and tts_buffer:
                 self.flush_buffer_to_tts(tts_buffer)
 
-            self.finished_signal.emit(full_response)
+            self.finished_signal.emit(chat_type, full_response)
             
         except Exception as e:
             error_msg = f"{str(e)}\n{traceback.format_exc()}"

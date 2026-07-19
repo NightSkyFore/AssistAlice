@@ -1,6 +1,8 @@
 from PySide6.QtWidgets import QApplication, QListView, QMenu, QStyle, QStyledItemDelegate
-from PySide6.QtCore import QEvent, QModelIndex, QRectF, QSize, Qt, QAbstractListModel, Signal
+from PySide6.QtCore import QEvent, QModelIndex, QPoint, QRectF, QSize, Qt, QAbstractListModel, Signal
 from PySide6.QtGui import QAction, QColor, QFont, QPainter, QPainterStateGuard, QTextDocument
+
+from ui.code_popup import CodeWidget
 
 SOURCE_CODE_ROLE = Qt.ItemDataRole.UserRole + 1
 
@@ -13,8 +15,8 @@ class MessageModel(QAbstractListModel):
         'attached_code': str,
     }
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent=None):
+        super().__init__(parent)
         self.messages = []  
 
     def rowCount(self, parent=QModelIndex()):
@@ -41,17 +43,31 @@ class MessageModel(QAbstractListModel):
             'attached_code': source_code})
         self.endInsertRows()
 
-class ChatDelegate(QStyledItemDelegate):
-    code_preview_signal = Signal(str)
+    def update_message(self, i: int, token: str):
+        if i >= len(self.messages):
+            print(f"[MessageModel]update failed: index: {i}, length: {len(self.messages)}")
+            return
+        if self.messages[i]['msg_type'] == 'loading':
+            reply_text = ""
+            self.messages[i]['msg_type'] = 'normal'
+        else:
+            reply_text = self.messages[i]['text']
 
+        reply_text += token
+        self.messages[i]['text'] = reply_text
+
+class ChatDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.bubble_margin = 5
         self.padding = 10
         self.code_icon_padding = 5
-        self.margin = 40  # 气泡距离另一侧的留白
+        # 气泡距离另一侧的留白
+        self.margin = 40
         self.radius = 12
-    
+
+        self.code_popup = CodeWidget(parent)
+
     def _set_text_document(self, option, font, text):
         # 准备文本渲染器（处理换行）
         doc = QTextDocument()
@@ -59,10 +75,10 @@ class ChatDelegate(QStyledItemDelegate):
         doc.setPlainText(text)
 
         # 限制文本最大宽度
-        max_width = option.rect.width() - self.margin - (self.padding * 2)
+        max_width = option.rect.width() - self.margin - (self.padding * 4)
         doc.setTextWidth(max_width)
         return doc
-    
+
     def paint(self, painter: QPainter, option, index):
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -95,7 +111,7 @@ class ChatDelegate(QStyledItemDelegate):
             bubble_x = option.rect.left() + self.padding
             bg_color = QColor("#FFFFFF")
             text_color = QColor("#1F1F1F")
-        
+
         is_selected = bool(option.state & QStyle.State_Selected)
         if is_selected:
             bg_color = QColor("#007ACC")
@@ -123,7 +139,7 @@ class ChatDelegate(QStyledItemDelegate):
             icon_text = "[📎 code]"
             painter.setPen("#9C9C9C")
             painter.drawText(icon_rect, Qt.AlignLeft | Qt.AlignTop, icon_text)
-        
+
     def sizeHint(self, option, index):
         # 告诉 QListView 每一个格子需要多高
         text = index.data(Qt.ItemDataRole.DisplayRole)
@@ -137,7 +153,7 @@ class ChatDelegate(QStyledItemDelegate):
         else:
             item_height = doc.size().height() + (self.padding + self.bubble_margin) * 2
         return QSize(option.rect.width(), item_height)
-    
+
     def editorEvent(self, event, model, option, index):
         if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
             source_code = index.data(SOURCE_CODE_ROLE)
@@ -154,19 +170,31 @@ class ChatDelegate(QStyledItemDelegate):
                     bubble_x = option.rect.left() + self.padding
                 icon_rect = QRectF(bubble_x + self.padding, option.rect.top() + self.bubble_margin, 80, 20)
                 if icon_rect.contains(event.pos()):
-                    self.code_preview_signal.emit(source_code)
+                    self.code_popup.set_code(source_code)
+                    global_pos = event.globalPosition().toPoint()
+                    self.code_popup.move(global_pos)
+                    self.code_popup.show()
                     return True
 
         # 如果没有点中图标，或者不是点击事件，交给父类走默认逻辑（比如选中该行）
         return super().editorEvent(event, model, option, index)
 
 class ChatListView(QListView):
-    remark_code_signal = Signal(str)
+    remark_code_signal = Signal(dict, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setSelectionMode(QListView.ExtendedSelection)
-    
+
+        # 样式优化：去掉默认蓝框
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        # 丝滑滚动
+        self.setVerticalScrollMode(QListView.ScrollMode.ScrollPerPixel)
+        # 禁横向滚动
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setResizeMode(QListView.ResizeMode.Adjust)
+        self.setStyleSheet("QListView { border: none; background-color: #FAFAFA; }")
+
     def contextMenuEvent(self, event):
         menu = QMenu(self)
         pos = event.globalPos()
@@ -178,8 +206,8 @@ class ChatListView(QListView):
 
         remark_action = QAction("Remark source code", self)
         source_code = ""
-        remark_action.triggered.connect(lambda: self.remark_code_signal.emit(source_code))
         index = self.indexAt(pos)
+        remark_action.triggered.connect(lambda: self._remake_code(index))
         if index.isValid():
             source_code = index.data(SOURCE_CODE_ROLE)
         remark_action.setEnabled(bool(self.selectedIndexes()) and index.isValid() and bool(source_code))
@@ -204,3 +232,10 @@ class ChatListView(QListView):
 
         text_to_copy = "\n".join(copied_texts)
         QApplication.clipboard().setText(text_to_copy)
+    
+    def _remake_code(self, index: QModelIndex):
+        if not index.isValid():
+            return
+        msg = {"role": index.data(Qt.ItemDataRole.UserRole), "content": index.data(Qt.ItemDataRole.DisplayRole)}
+        code = index.data(SOURCE_CODE_ROLE)
+        self.remark_code_signal.emit(msg, code)

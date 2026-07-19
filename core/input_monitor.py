@@ -1,5 +1,6 @@
 import time
 from datetime import datetime, date, time as dtime
+from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QObject, QThread, Signal
 from pynput import mouse, keyboard
 
@@ -18,7 +19,10 @@ SLEEP_MSG = {
 }
 
 class InputMonitor(QThread):
+    # hotkey signal
     toggle_mic_signal = Signal()
+    code_clipboard_signal = Signal()
+    code_clipboard_quick_signal = Signal()
     # only for TTS reminding
     remind_status_signal = Signal(str)
     # send to LLM
@@ -32,10 +36,11 @@ class InputMonitor(QThread):
         self.key_count = 0
         self.mouse_move_dist = 0
         
-        self.hotkey_handler = keyboard.HotKey(
-            keyboard.HotKey.parse('<alt>+r'),
-            self.on_hotkey_triggered
-        )
+        self.hotkey_handlers = [
+            keyboard.HotKey(keyboard.HotKey.parse('<alt>+r'), self.on_hotkey_microphone),
+            keyboard.HotKey(keyboard.HotKey.parse('<alt>+c'), self.on_hotkey_clipboard),
+            keyboard.HotKey(keyboard.HotKey.parse('<ctrl>+<alt>+r'), self.on_hotkey_clipboard_quick),
+        ]
 
         self.status = WorkStatus(lang)
         self.status.rs_internal_signal.connect(self.forward_rs_signal)
@@ -47,8 +52,14 @@ class InputMonitor(QThread):
         self.work_time = datetime.strptime(work_time, "%H:%M").time()
         self.sleep_time = datetime.strptime(sleep_time, "%H:%M").time()
 
-    def on_hotkey_triggered(self):
+    def on_hotkey_microphone(self):
         self.toggle_mic_signal.emit()
+
+    def on_hotkey_clipboard(self):
+        self.code_clipboard_signal.emit()
+
+    def on_hotkey_clipboard_quick(self):
+        self.code_clipboard_quick_signal.emit()
 
     def forward_rs_signal(self, msg):
         self.remind_status_signal.emit(msg)
@@ -60,14 +71,16 @@ class InputMonitor(QThread):
         self.key_count += 1
         try:
             if self.k_listener:
-                self.hotkey_handler.press(self.k_listener.canonical(key))
+                for handler in self.hotkey_handlers:
+                    handler.press(self.k_listener.canonical(key))
         except Exception as e:
             print(f"Hotkey press exception: {e}")
 
     def on_release(self, key):
         try:
             if self.k_listener:
-                self.hotkey_handler.release(self.k_listener.canonical(key))
+                for handler in self.hotkey_handlers:
+                    handler.release(self.k_listener.canonical(key))
         except Exception as e:
             pass
 

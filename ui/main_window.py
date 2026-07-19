@@ -1,11 +1,11 @@
 from datetime import datetime
 import queue
 
-from PySide6.QtWidgets import QApplication, QListView, QMainWindow, QPushButton, QVBoxLayout, QWidget, QHBoxLayout
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QHBoxLayout
 from PySide6.QtGui import QFontDatabase
+from PySide6.QtCore import QPoint
 
-from core.alice_ai import AliceAI, init_greeting
+from core.alice_ai import AliceAI 
 from core.dialog_manager import DialogManager
 from core.input_monitor import InputMonitor
 from core.llm_worker import LLMWorker
@@ -18,6 +18,7 @@ from core.tts_melo_worker import MeloTTSWorker
 from core.tts_play_worker import TTSPlayWorker
 from core.tts_tonic_jp_worker import TonicTTSWorker
 from core.tts_vits_en_worker import VitsTTSWorker
+from ui.code_popup import CodeWidget
 from ui.main_ai_show import AIShow
 from ui.main_chat_input import ChatInputArea
 from ui.main_chat_view import ChatDelegate, ChatListView, MessageModel
@@ -48,6 +49,7 @@ class MainWindow(QMainWindow):
 
         self._stt_draft_buffer = ""
         self._source_code = ""
+        self._remark_code_response = None
         self.llm_queue = queue.Queue()
         self.tts_queue = queue.Queue()
 
@@ -76,6 +78,8 @@ class MainWindow(QMainWindow):
 
         self.moniter = InputMonitor(**custom_config)
         self.moniter.toggle_mic_signal.connect(self.mic_btn.animateClick)
+        self.moniter.code_clipboard_signal.connect(self.on_code_clipboard)
+        self.moniter.code_clipboard_quick_signal.connect(self.on_quick_code_clipboard)
         self.moniter.remind_status_signal.connect(self.on_reminding)
         self.moniter.work_status_signal.connect(self.on_daily_work_summary)
         self.moniter.start()
@@ -115,29 +119,25 @@ class MainWindow(QMainWindow):
         self.chat_view.setItemDelegate(self.delegate)
         fixed_font = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
         self.chat_view.setFont(fixed_font)
-
-        # 样式优化：去掉默认蓝框
-        self.chat_view.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.chat_view.setVerticalScrollMode(QListView.ScrollMode.ScrollPerPixel) # 丝滑滚动
-        self.chat_view.setStyleSheet("QListView { border: none; background-color: #FAFAFA; }")
+        self.chat_view.remark_code_signal.connect(self.on_chat_view_remark)
 
         # 输入工具栏
         self.mic_btn = QPushButton("🎙️ Mic")
         self.mic_btn.setObjectName("mic_btn")
         self.mic_btn.setCheckable(True)
         self.mic_btn.setFixedHeight(45)
-        self.mic_btn.setFixedWidth(80)
+        self.mic_btn.setFixedWidth(100)
         self.mic_btn.clicked.connect(self.toggle_microphone)
 
         self.assist_btn = QPushButton("🎬 Assist")
         self.assist_btn.setCheckable(True)
         self.assist_btn.setFixedHeight(45)
-        self.assist_btn.setFixedWidth(80)
+        self.assist_btn.setFixedWidth(100)
 
         self.code_btn = QPushButton("📎 Code")
-        self.code_btn.setCheckable(True)
         self.code_btn.setFixedHeight(45)
-        self.code_btn.setFixedWidth(80)
+        self.code_btn.setFixedWidth(100)
+        self.code_btn.clicked.connect(self.toggle_code_popup)
 
         button_style = """
             QPushButton {
@@ -217,6 +217,8 @@ class MainWindow(QMainWindow):
         layout.addLayout(left_layout, 1)
         layout.addLayout(right_layout, 2)
 
+        self.code_popup = CodeWidget(self)
+
     # microphone event
     def toggle_microphone(self, checked):
         if checked:
@@ -278,6 +280,17 @@ class MainWindow(QMainWindow):
         self._stt_draft_buffer = "" 
         self.handle_send(final_text)
 
+    # code
+    def toggle_code_popup(self):
+        if not self.code_popup.isActiveWindow():
+            global_pos = self.code_btn.mapToGlobal(QPoint(0, 0))
+            self.code_popup.move(global_pos)
+            self.code_popup.show()
+
+    def on_chat_view_remark(self, msg: dict, code: str):
+        self._remark_code_response = msg
+        self.code_popup.set_code(code)
+
     # tts initial
     def init_tts(self, lang: str = "zh_mix", tts_cpu: int = 4, **kwargs,):
         if lang == "en":
@@ -294,7 +307,7 @@ class MainWindow(QMainWindow):
         self.thinking_index = self.model.rowCount() - 1
         self.set_ui_busy(True)
 
-        messages = init_greeting(**self._custom_config)
+        messages = self.alice.init_greeting()
         self.llm_queue.put({"type": "chat", "msg": messages})
 
     def trigger_send_from_button(self):
@@ -304,46 +317,56 @@ class MainWindow(QMainWindow):
             self.input_edit.clear()
 
     def handle_send(self, text: str):
+        self._source_code = self.code_popup.get_code()
+        self.code_popup.set_code("")
+        self.code_btn.setText("📎 Code")
+
         # ui update 
-        self.model.add_message(text, True)
+        show_text = text if text else "code analysis"
+        self.model.add_message(show_text, True, source_code=self._source_code)
         self.chat_view.scrollToBottom()
 
-        # history update
-        self.dialog_manager.add("user", text)
-
         # waiting ui
-        self.model.add_message("Alice thinking...", False, 'loading')
+        self.model.add_message("Alice thinking...", False, 'loading', self._source_code)
         self.chat_view.scrollToBottom()
         self.thinking_index = self.model.rowCount() - 1
         self.set_ui_busy(True)
 
-        # wait for worker
-        messages = self.dialog_manager.build()
-        self.llm_queue.put({"type": "chat", "msg": messages})
+        if self._source_code:
+            # history update
+            self.dialog_manager.add("user", show_text, "code", self._source_code)
+
+            messages = self.alice.generate_coding_prompt(text, self._source_code)
+            if self._remark_code_response:
+                messages = [self._remark_code_response] + messages
+                self._remark_code_response = None
+            self.llm_queue.put({"type": "code", "msg": messages})
+        else:
+            # history update
+            self.dialog_manager.add("user", text)
+
+            # wait for worker
+            messages = self.dialog_manager.build()
+            self.llm_queue.put({"type": "chat", "msg": messages})
 
     def on_llm_emotion(self, emotion):
         self.pet.pet_emotion_change(emotion)
 
     def on_llm_word(self, word):
         # update chat_view
-        if self.model.messages[self.thinking_index]['msg_type'] == 'loading':
-            reply_text = ""
-            self.model.messages[self.thinking_index]['msg_type'] = 'normal'
-        else:
-            reply_text = self.model.messages[self.thinking_index]['text']
-
-        reply_text += word
-        self.model.messages[self.thinking_index]['text'] = reply_text
+        self.model.update_message(self.thinking_index, word)
         self.model.layoutChanged.emit() 
         self.chat_view.scrollToBottom()
 
     def on_llm_sentence(self, sentence):
         self.tts_queue.put(sentence)
 
-    def on_llm_reply(self, reply_text):
+    def on_llm_reply(self, reply_type, reply_text):
         # history update
         print(f"Alice: {reply_text}")
-        self.dialog_manager.add("assistant", reply_text)
+        self.dialog_manager.add("assistant", reply_text, reply_type, self._source_code)
+        if self._source_code:
+            self._source_code = ""
 
         if self.dialog_manager.need_summurize():
             self.trigger_background_summary()
@@ -366,6 +389,7 @@ class MainWindow(QMainWindow):
         self.llm_queue.put({"type": "summarize", "msg": history_content})
 
     def on_summary_done(self, new_summary: str):
+        print(f"Memory Update:\n{new_summary}")
         self.dialog_manager.update_summary(new_summary)
         cur_time = datetime.strftime(datetime.now(), "%Y-%m-%D %H:%M:%S")
         print(f"[{cur_time}] Summarize done")
@@ -385,11 +409,23 @@ class MainWindow(QMainWindow):
 
     # input moniter
     def on_reminding(self, message):
+        print(message)
         self.tts_queue.put(message)
     
     def on_daily_work_summary(self, work_status):
         self.set_ui_busy(True)
         self.trigger_background_summary(work_status)
+
+    def on_code_clipboard(self):
+        text = QApplication.clipboard().text()
+        self.code_popup.set_code(text)
+        line_count = len(text.split("\n"))
+        self.code_btn.setText(f"📎 Code({line_count})")
+
+    def on_quick_code_clipboard(self):
+        text = QApplication.clipboard().text()
+        self.code_popup.set_code(text)
+        self.handle_send("")
 
     # window action
     def closeEvent(self, e):

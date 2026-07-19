@@ -10,12 +10,15 @@ class MemoryManager:
     def init_memory(self):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
+        # chat_type: ['chat', 'code', 'media']
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS dialog_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 role TEXT,
                 content TEXT,
+                chat_type TEXT DEFAULT 'chat',
+                source_code TEXT DEFAULT '',
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -37,7 +40,7 @@ class MemoryManager:
 
         cursor.execute("SELECT content, last_msg_id FROM summary ORDER BY id DESC LIMIT 1")
         summary_row = cursor.fetchone()
-        
+
         summary_text = ""
         last_id = 0
         if summary_row:
@@ -45,11 +48,10 @@ class MemoryManager:
 
         # load dialog according to last_msg_id
         cursor.execute(
-            "SELECT role, content FROM dialog_history WHERE id > ? ORDER BY id ASC", 
+            "SELECT role, content FROM dialog_history WHERE id > ? and chat_type = 'chat' ORDER BY id ASC", 
             (last_id,)
         )
         last_hist = [{"role": r, "content": c} for r, c in cursor.fetchall()]
-        
+
         conn.close()
         return summary_text, last_hist 
-    

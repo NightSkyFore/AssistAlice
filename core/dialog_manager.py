@@ -17,7 +17,7 @@ class DialogManager:
         self.db_queue = queue.Queue()
         self.mem_worker = MemoryWorker(self.db_queue, self.db_path)
         self.mem_worker.start()
-    
+
     def load_from_memory(self):
         memory_manager = MemoryManager(self.db_path)
         summary_text, last_hist = memory_manager.load_memory()
@@ -28,9 +28,10 @@ class DialogManager:
             self.history = last_hist
             print(f"Load dialog history: {len(last_hist)}")
 
-    def add(self, role: str, content: str):
-        self.history.append({"role": role, "content": content})
-        task = {"action": "new_dialog", "role": role, "content": content}
+    def add(self, role: str, content: str, chat_type: str = "chat", source_code: str = ""):
+        if chat_type == "chat":
+            self.history.append({"role": role, "content": content})
+        task = {"action": "new_dialog", "role": role, "content": content, "chat_type": chat_type, "source_code": source_code}
         self.db_queue.put(task)
 
     def build(self) -> list:
@@ -41,10 +42,10 @@ class DialogManager:
             ]
         else:
             return list(self.history)
-    
+
     def need_summurize(self) -> bool:
         return len(self.history) > self.max_history_len
-    
+
     def build_to_summarize(self) -> str:
         if self.summary:
             chat_text = f"OLD SUMMARY:\n{self.summary}\n\nRECENT DIALOGUE:\n"
@@ -57,10 +58,10 @@ class DialogManager:
         if new_summary:
             self.summary = new_summary
             # 本地LLM不允许同时进行推理和总结，主线程做了并发限制，这里直接clear
-            # 多线程的方式是buildToSummarize里记录历史快照长度snap_hisotry_len，这里裁剪history=hisotry[snap_history_len:]
+            # 多会话并行的方式是build_to_summarize里记录历史快照长度snap_hisotry_len，然后此处裁剪history=hisotry[snap_history_len:]
             self.history.clear()
             task = {"action": "new_summary", "content": new_summary}
             self.db_queue.put(task)
-    
+
     def close_mem(self):
         self.mem_worker.stop()
