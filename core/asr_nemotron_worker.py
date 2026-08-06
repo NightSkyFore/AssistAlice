@@ -46,7 +46,6 @@ class ASRNemotronWorker(QThread):
         try:
             default_speaker = sc.default_speaker()
             all_mics = sc.all_microphones(include_loopback=True)
-            print(all_mics)
 
             loopback_mic = None
             # same in Windows, but appending "monitor" in Linux
@@ -59,8 +58,12 @@ class ASRNemotronWorker(QThread):
                 elif mic.isloopback and mic.name == default_speaker.name:
                     loopback_mic = mic
                     break
+                if not loopback_mic:
+                    loopback_mics = [m for m in all_mics if m.isloopback]
+                    if loopback_mics:
+                        loopback_mic = loopback_mics[0]
                 else:
-                    raise Exception("[SpeakerASR]loopback not found.")
+                    raise Exception("[SpeakerASR] No loopback device found.")
             print(f"[SpeakerASR]listening loopback: {loopback_mic.name}")
         except Exception as e:
             print(f"[SpeakerASR]loopback Exception: {e}")

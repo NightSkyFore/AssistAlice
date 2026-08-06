@@ -97,7 +97,12 @@ class SubtitleLabel(QWidget):
                     self.slide_anim.setEndValue(0.0)
                     self.slide_anim.start()
                 self._last_line_count = line_count
-        
+            # when streaming update with new text
+            elif line_count < self._last_line_count:
+                self.slide_anim.stop()
+                self._last_line_count = line_count
+                self._render_start_line = max(0, line_count - self.max_lines)
+
         else:
             self.slide_anim.stop()
             self._last_line_count = line_count
@@ -130,7 +135,7 @@ class SubtitleLabel(QWidget):
             line = self.text_lines[i]
             line_width = self.metrics.horizontalAdvance(line)
             render_x = self.margin + (self.safe_width - line_width) / 2
-            # for line[0,1,2], with max_lines=2, line 0 render at (0,0) when animation start, then slide to (0, -1).
+            # for line[0,1,2], with max_lines=2, line 0 render at (0,0) when animation start, then slide to (0,-1).
             render_y = self.margin + ((i - total_line_num) + self.max_lines) * self.line_spacing + self._y_offset + self.metrics.ascent()
             path = QPainterPath()
             path.addText(render_x, render_y, self.display_font, line)

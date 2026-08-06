@@ -337,7 +337,7 @@ class MainWindow(QMainWindow):
 
     def on_streaming_media(self, text):
         self._cur_subtitle = text
-        self.media.osd_on_streaming(f"{self._last_subtitle} {self._cur_subtitle}")
+        self.media.osd_on_streaming(f"{self._last_subtitle}, {self._cur_subtitle}")
 
     def handle_media_silence(self):
         if not self._cur_subtitle.strip():
