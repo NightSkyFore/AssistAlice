@@ -9,7 +9,7 @@ EN_MODEL_PATH = "./model/stt-model/sherpa-onnx-nemotron-3.5-asr-streaming-0.6b-5
 
 _POISON_PILL = object()
 
-class NemotronWorker(QThread):
+class NemotronSTTWorker(QThread):
     text_signal = Signal(str)
     speech_silence_signal = Signal()
     volume_signal = Signal(float)

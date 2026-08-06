@@ -5,7 +5,7 @@ import traceback
 from PySide6.QtCore import QThread, Signal
 
 from core.alice_ai import AliceAI
-from core.text_utils import is_cjk_char
+from core.text_utils import MSG_TYPE_CHAT, MSG_TYPE_CODE, MSG_TYPE_MEDIA, MSG_TYPE_SUBTITLE, MSG_TYPE_SUMMARY, is_cjk_char
 
 _POISON_PILL = object()
 
@@ -45,9 +45,9 @@ class LLMWorker(QThread):
                     self.msg_queue.task_done()
                     break
 
-                if task["type"] in ["chat", "code"]:
+                if task["type"] in [MSG_TYPE_CHAT, MSG_TYPE_CODE, MSG_TYPE_SUBTITLE, MSG_TYPE_MEDIA]:
                     self.chat(task["msg"], task["type"])
-                elif task["type"] == "summarize":
+                elif task["type"] == MSG_TYPE_SUMMARY:
                     self.summarize(task["msg"])
 
                 self.msg_queue.task_done()

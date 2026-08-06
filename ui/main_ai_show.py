@@ -4,8 +4,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QPainter
 
 class AIShow(QWidget):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent: QWidget = None):
+        super().__init__(parent)
         self.pixmap = QPixmap("./assets/Elf-Alice.png")
         if self.pixmap.isNull():
             print(f"Error: No image!")
@@ -27,4 +27,3 @@ class AIShow(QWidget):
         y = (self.height() - pixmap_rect.height()) / 2
 
         painter.drawPixmap(x, y, pixmap_rect.width(), pixmap_rect.height(), self.pixmap)
-

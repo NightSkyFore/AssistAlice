@@ -5,12 +5,14 @@ import multiprocessing
 from typing import Iterator, Union
 from llama_cpp import GGML_TYPE_Q8_0, CreateChatCompletionResponse, CreateChatCompletionStreamResponse, Llama
 
+from core.text_utils import LLM_PROMPT_LANG, MSG_TYPE_CODE, MSG_TYPE_MEDIA, MSG_TYPE_SUBTITLE
 from . import custom_tools
 
 # modify here if use another model
 MODEL_PATH = "./model/llm-model/llama-3.2-3b-instruct-q4_k_m.gguf"
 
 # ==== system prompt =====
+# You can customize your system prompt in: config/system_prompt.txt
 # translate 'Example' to your language if you want Alice to answer in another language.
 # like:
 #
@@ -103,34 +105,17 @@ Your goal is to provide precise, professional, and directly useful responses to 
 - If outputting code, encapsulate it within standard markdown code blocks.
 - Keep non-code explanations clear, professional, and dense with information. Do not over-explain basic programming concepts unless explicitly asked.
 """
-# user prompt for coding
-BASE_CODING_PROMPT_MAP = {
-    "en": "Read the following code, and answer with:\n 1.Explain the code;\n 2.Figure out if there is any bug;\n 3.Consider for optimization.\n\n###Code\n{code}",
-    "ja": "以下のコードを読んで、次の質問に答えてください。\n 1.コードを説明する。\n 2.バグがあるかどうかを確認する。\n 3.最適化を検討する。\n\n###コード\n{code}",
-    "zh": "阅读以下代码，并回答：\n 1.解释代码；\n 2.找出可能存在的问题；\n 3.思考是否需要优化重构。\n\n###代码\n{code}",
-    "zh_mix": "阅读以下代码，并回答：\n 1.解释代码及其运行结果；\n 2.找出可能存在的bug；\n 3.思考是否需要优化重构。\n\n###Code\n{code}",
-}
-ADVANCE_CODING_PROMPT = """
-Read the following code, answer strictly in {language}.
 
-###Code
-{code}
+# system prompt for media assistant
+MEDIA_ASSIST_PROMPT="""
+You are an AI assistant for a real-time streaming video/audio assistant system.
+Your task is to summarize incoming speech chunks concisely while maintaining context consistency. So that help user to understand the context in media.
 
-###User Request
-{text}
-
-### Task:
-1. Analyze the question directly if there are some problems to be solved.
-2. DO NOT simply repeat the original code unless you have made specific modifications to fix a bug or implement a request.
+CRITICAL DIRECTIVES FOR PROPER NOUNS:
+- DO NOT translate proper nouns, brand/product names, technical terms, acronyms, or personal names.
+    e.g., keep "Linux", "CUDA", "OpenAI", "Llama" in their exact original form.
+- Keep responses concise and structured. Avoid unnecessary conversational filler.
 """
-
-LLM_PROMPT_LANG = {"en", "ja", "zh", "zh_mix"}
-LLM_PROMPT_LANG_MAP = {
-    "en": "English",
-    "ja": "日本語",
-    "zh": "中文",
-    "zh_mix": "中文",
-}
 
 class AliceAI:
     def __init__(
@@ -184,10 +169,16 @@ class AliceAI:
         self.n_threads_batch = max(max(cpu_count - 4, 1), half_cpu_count)
 
     def get_response(self, user_messages: list, chat_type: str = "chat") -> str:
-        if chat_type == "code":
+        if chat_type == MSG_TYPE_CODE:
             chat_temperature = 0.15
             messages = [
                 {"role": "system", "content": CODING_PROMPT},
+                *user_messages
+            ]
+        elif chat_type == MSG_TYPE_SUBTITLE or chat_type == MSG_TYPE_MEDIA:
+            chat_temperature = 0.1
+            messages = [
+                {"role": "system", "content": MEDIA_ASSIST_PROMPT},
                 *user_messages
             ]
         else:
@@ -238,6 +229,12 @@ class AliceAI:
             chat_temperature = 0.15
             messages = [
                 {"role": "system", "content": CODING_PROMPT},
+                *user_messages
+            ]
+        elif chat_type == "media" or chat_type == "subtitle":
+            chat_temperature = 0.1
+            messages = [
+                {"role": "system", "content": MEDIA_ASSIST_PROMPT},
                 *user_messages
             ]
         else:
@@ -352,15 +349,4 @@ class AliceAI:
         return [{
             "role": "user",
             "content": greet[self.lang].format(cur_time=cur_time)
-        }]
-
-    def generate_coding_prompt(self, text: str, code: str):
-        if text:
-            return [{
-                "role": "user",
-                "content": ADVANCE_CODING_PROMPT.format(code=code, text=text, language=LLM_PROMPT_LANG_MAP[self.lang])
-            }]
-        return [{
-            "role": "user",
-            "content": BASE_CODING_PROMPT_MAP[self.lang].format(code=code)
         }]

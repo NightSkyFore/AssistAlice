@@ -7,13 +7,12 @@ from PySide6.QtGui import QCursor
 from ui.subtitle_label import SubtitleLabel
 
 class OSDTextWindow(QWidget):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent: QWidget = None):
+        super().__init__(parent)
 
         self.setWindowFlags(
-            Qt.FramelessWindowHint | 
-            Qt.WindowStaysOnTopHint | 
-            Qt.SubWindow |
+            Qt.FramelessWindowHint |
+            Qt.WindowStaysOnTopHint |
             Qt.Tool |
             Qt.WindowDoesNotAcceptFocus
         )
@@ -24,7 +23,7 @@ class OSDTextWindow(QWidget):
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         self.bg_container = QWidget(self)
         self.bg_container.setObjectName("osd_bg_container")
         main_layout.addWidget(self.bg_container)
@@ -95,12 +94,12 @@ class OSDTextWindow(QWidget):
         else:
             self.type_timer.stop()
             self.hide_timer.start(self._display_time_ms)
-    
+
     def fade_in(self):
         self.anim_out.blockSignals(True)
         self.anim_out.stop()
         self.anim_out.blockSignals(False)
-        
+
         self.anim_in.setStartValue(self.opacity_effect.opacity())
         self.anim_in.start()
 
@@ -114,7 +113,7 @@ class OSDTextWindow(QWidget):
         self.full_text = ""
         self.label.set_text("")
         self.char_queue.clear()
-    
+
     def enable_preview(self):
         self.setStyleSheet("""
             #osd_bg_container {
@@ -135,14 +134,13 @@ class OSDTextWindow(QWidget):
         self.label.change_font_size(upscale)
 
 class OSDHandleWindow(QWidget):
-    def __init__(self, parent: QWidget = None):
+    def __init__(self, target: QWidget, parent: QWidget = None):
         super().__init__(parent)
-        self.target_window = parent 
+        self.target_window = target
 
         self.setWindowFlags(
             Qt.FramelessWindowHint |
             Qt.WindowStaysOnTopHint |
-            Qt.SubWindow |
             Qt.Tool
         )
         self.setAttribute(Qt.WA_TranslucentBackground, True)
@@ -188,12 +186,12 @@ class OSDHandleWindow(QWidget):
         self.leave_watcher.timeout.connect(self._poll_mouse_position)
 
         self.drag_position = QPoint()
-    
+
     def _move_to_attached(self):
         target_x = self.target_window.pos().x() + self.target_window.width()
         target_y = self.target_window.pos().y()
         self.move(target_x, target_y)
-    
+
     def _set_clear_btn(self, btn: QPushButton):
         btn.setFixedSize(30, 30)
         btn.setStyleSheet("""
@@ -209,7 +207,7 @@ class OSDHandleWindow(QWidget):
                 background-color: #c0c0c0;
             }
         """)
-    
+
     def enterEvent(self, event):
         self.stay_timer.start(self._stay_on_ms)
         self.leave_watcher.start()
@@ -217,16 +215,16 @@ class OSDHandleWindow(QWidget):
         self.update()
 
         return super().enterEvent(event)
-    
+
     def _trigger_enter_preview(self):
         self.target_window.enable_preview()
-    
+
     def leaveEvent(self, event):
         return super().leaveEvent(event)
-    
+
     def _poll_mouse_position(self):
         local_pos = self.mapFromGlobal(QCursor.pos())
-        
+
         if not self.rect().contains(local_pos):
             self._trigger_leave()
 
@@ -235,12 +233,12 @@ class OSDHandleWindow(QWidget):
             self.stay_timer.stop()
         if self.leave_watcher.isActive():
             self.leave_watcher.stop()
-        
+
         self.opacity_effect.setOpacity(0.1)
         self.update()
 
         self.target_window.disable_preview()
-    
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.drag_position = event.globalPos() - self.pos()
@@ -250,7 +248,7 @@ class OSDHandleWindow(QWidget):
         if event.buttons() == Qt.LeftButton:
             new_pos = event.globalPos() - self.drag_position
             self.move(new_pos)
-            
+
             self.target_window.move(new_pos.x() - self.target_window.width(), new_pos.y())
             event.accept() 
 

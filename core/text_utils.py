@@ -1,6 +1,20 @@
 import re
 from num2words import num2words
 
+LLM_PROMPT_LANG = {"en", "ja", "zh", "zh_mix"}
+LLM_PROMPT_LANG_MAP = {
+    "en": "English",
+    "ja": "日本語",
+    "zh": "中文",
+    "zh_mix": "中文",
+}
+
+MSG_TYPE_CHAT = "chat"
+MSG_TYPE_CODE = "code"
+MSG_TYPE_SUBTITLE = "subtitle"
+MSG_TYPE_MEDIA = "media"
+MSG_TYPE_SUMMARY = "summary"
+
 PUNCTUATIONS = set("，。！？；\n!?;,.")
 
 CJK_RANGE = [

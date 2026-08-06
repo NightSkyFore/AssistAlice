@@ -1,4 +1,5 @@
 from datetime import datetime
+from email import message
 import queue
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QHBoxLayout
@@ -6,14 +7,15 @@ from PySide6.QtGui import QFontDatabase
 from PySide6.QtCore import QPoint
 
 from core.alice_ai import AliceAI 
+from core.asr_nemotron_worker import ASRNemotronWorker
 from core.dialog_manager import DialogManager
 from core.input_monitor import InputMonitor
 from core.llm_worker import LLMWorker
-from core.stt_nemotron_worker import NemotronWorker
+from core.stt_nemotron_worker import NemotronSTTWorker
 from core.stt_reazon_worker import ReazonSTTWorker
 from core.stt_sense_worker import SenseVoiceSTTWorker
 from core.stt_streaming_worker import XASRStreamingWorker
-from core.text_utils import PUNCTUATIONS
+from core.text_utils import MSG_TYPE_CHAT, MSG_TYPE_CODE, MSG_TYPE_MEDIA, MSG_TYPE_SUBTITLE, MSG_TYPE_SUMMARY, PUNCTUATIONS
 from core.tts_melo_worker import MeloTTSWorker
 from core.tts_play_worker import TTSPlayWorker
 from core.tts_tonic_jp_worker import TonicTTSWorker
@@ -22,6 +24,7 @@ from ui.code_popup import CodeWidget
 from ui.main_ai_show import AIShow
 from ui.main_chat_input import ChatInputArea
 from ui.main_chat_view import ChatDelegate, ChatListView, MessageModel
+from ui.media_subtitle_manager import MediaSubtitleManager
 from ui.pet_manager import PetSystemManager
 from ui.tray_icon import TrayIcon
 from ui.voice_wave import VoiceWaveWidget
@@ -33,7 +36,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Alice AI Assistant")
         self.setMinimumSize(900, 600)
 
-        self.pet = PetSystemManager()
+        self.pet = PetSystemManager(self)
+        self.media = MediaSubtitleManager(self)
 
         self.tray = TrayIcon(self)
         self.tray.show()
@@ -48,13 +52,18 @@ class MainWindow(QMainWindow):
         self._llm_busy = False
 
         self._stt_draft_buffer = ""
+
         self._source_code = ""
         self._remark_code_response = None
+
+        self._last_subtitle = ""
+        self._cur_subtitle = ""
+
         self.llm_queue = queue.Queue()
         self.tts_queue = queue.Queue()
 
         # core 
-        self.dialog_manager = DialogManager()
+        self.dialog_manager = DialogManager(**custom_config)
 
         self.alice = AliceAI(**custom_config)
         self.llm_worker = LLMWorker(self.alice, self.llm_queue)
@@ -67,6 +76,7 @@ class MainWindow(QMainWindow):
         self.llm_worker.start()
 
         self.stt_worker = None
+        self.media_asr_worker = None
 
         self.tts_worker = self.init_tts(**custom_config)
         self.tts_worker.tts_sentence_signal.connect(self.on_tts_sentence)
@@ -88,7 +98,7 @@ class MainWindow(QMainWindow):
 
     def setup_ui(self):
         # main
-        main_widget = QWidget()
+        main_widget = QWidget(self)
         self.setCentralWidget(main_widget)
         layout = QHBoxLayout(main_widget)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -121,7 +131,7 @@ class MainWindow(QMainWindow):
         self.chat_view.setFont(fixed_font)
         self.chat_view.remark_code_signal.connect(self.on_chat_view_remark)
 
-        # 输入工具栏
+        # 输入工具栏按钮
         self.mic_btn = QPushButton("🎙️ Mic")
         self.mic_btn.setObjectName("mic_btn")
         self.mic_btn.setCheckable(True)
@@ -133,6 +143,7 @@ class MainWindow(QMainWindow):
         self.assist_btn.setCheckable(True)
         self.assist_btn.setFixedHeight(45)
         self.assist_btn.setFixedWidth(100)
+        self.assist_btn.clicked.connect(self.toggle_media_assist)
 
         self.code_btn = QPushButton("📎 Code")
         self.code_btn.setFixedHeight(45)
@@ -227,12 +238,12 @@ class MainWindow(QMainWindow):
             self.stop_stt()
         self.tray.change_status(checked)
 
-    def start_stt(self, lang: str = "zh_mix", stt_cpu: int = 2, **kwargs,):
+    def start_stt(self, lang: str = "en", stt_cpu: int = 2, **kwargs,):
         if lang == "zh_mix":
             self.stt_worker = XASRStreamingWorker(stt_cpu)
             self.stt_worker.text_signal.connect(self.on_streaming_voice_input)
         elif lang == "en":
-            self.stt_worker = NemotronWorker(lang, stt_cpu)
+            self.stt_worker = NemotronSTTWorker(lang, stt_cpu)
             self.stt_worker.text_signal.connect(self.on_streaming_voice_input)
         elif lang == "ja":
             self.stt_worker = ReazonSTTWorker(stt_cpu)
@@ -254,13 +265,13 @@ class MainWindow(QMainWindow):
     def on_streaming_voice_input(self, text):
         self._stt_draft_buffer = text
         self.input_edit.setPlainText(self._stt_draft_buffer)
-        
+
         self.pet.osd_on_streaming(text)
 
     def on_vad_voice_input(self, text):
         self._stt_draft_buffer += text
         self.input_edit.setPlainText(self._stt_draft_buffer)
-        
+
         self.pet.osd_on_text(text)
 
     def handle_silence(self):
@@ -291,6 +302,55 @@ class MainWindow(QMainWindow):
         self._remark_code_response = msg
         self.code_popup.set_code(code)
 
+    # media speaker asr event
+    def toggle_media_assist(self, checked):
+        if checked:
+            self.stop_stt()
+            if self.mic_btn.isChecked():
+                self.mic_btn.setChecked(False)
+            self.mic_btn.setEnabled(False)
+            self.set_ui_busy(True)
+            self.media.show_media_subtitle()
+            self.start_media_asr(**self._custom_config)
+        else:
+            self.stop_media_asr()
+            self.media.hide_media_subtitle()
+            self.mic_btn.setEnabled(True)
+            if self.dialog_manager.has_media_data():
+                self.append_llm_loading_msg()
+                messages = self.dialog_manager.build_media_final_summarize()
+                self.llm_queue.put({"type": MSG_TYPE_MEDIA, "msg": messages})
+            else:
+                self.set_ui_busy(False)
+
+    def start_media_asr(self, stt_cpu: int = 2, **kwargs,):
+        self.media_asr_worker = ASRNemotronWorker(stt_cpu=stt_cpu)
+        self.media_asr_worker.text_signal.connect(self.on_streaming_media)
+        self.media_asr_worker.speech_silence_signal.connect(self.handle_media_silence)
+        self.media_asr_worker.volume_signal.connect(self.wave.set_amplitude)
+        self.media_asr_worker.start()
+
+    def stop_media_asr(self):
+        if self.media_asr_worker:
+            self.media_asr_worker.stop()
+            self.media_asr_worker = None
+
+    def on_streaming_media(self, text):
+        self._cur_subtitle = text
+        self.media.osd_on_streaming(f"{self._last_subtitle} {self._cur_subtitle}")
+
+    def handle_media_silence(self):
+        if not self._cur_subtitle.strip():
+            return
+        self.dialog_manager.add_subtitle(self._cur_subtitle)
+        self._last_subtitle = self._cur_subtitle
+        self._cur_subtitle = ""
+
+        if self.dialog_manager.need_subtitle_summurize():
+            self.append_llm_loading_msg()
+            messages = self.dialog_manager.build_media_subtitle_summarize()
+            self.llm_queue.put({"type": MSG_TYPE_SUBTITLE, "msg": messages})
+
     # tts initial
     def init_tts(self, lang: str = "zh_mix", tts_cpu: int = 4, **kwargs,):
         if lang == "en":
@@ -308,7 +368,7 @@ class MainWindow(QMainWindow):
         self.set_ui_busy(True)
 
         messages = self.alice.init_greeting()
-        self.llm_queue.put({"type": "chat", "msg": messages})
+        self.llm_queue.put({"type": MSG_TYPE_CHAT, "msg": messages})
 
     def trigger_send_from_button(self):
         text = self.input_edit.toPlainText().strip()
@@ -327,27 +387,25 @@ class MainWindow(QMainWindow):
         self.chat_view.scrollToBottom()
 
         # waiting ui
-        self.model.add_message("Alice thinking...", False, 'loading', self._source_code)
-        self.chat_view.scrollToBottom()
-        self.thinking_index = self.model.rowCount() - 1
+        self.append_llm_loading_msg()
         self.set_ui_busy(True)
 
         if self._source_code:
             # history update
-            self.dialog_manager.add("user", show_text, "code", self._source_code)
+            self.dialog_manager.add("user", show_text, MSG_TYPE_CODE, self._source_code)
 
-            messages = self.alice.generate_coding_prompt(text, self._source_code)
+            messages = self.dialog_manager.build_coding_prompt(text, self._source_code)
             if self._remark_code_response:
                 messages = [self._remark_code_response] + messages
                 self._remark_code_response = None
-            self.llm_queue.put({"type": "code", "msg": messages})
+            self.llm_queue.put({"type": MSG_TYPE_CODE, "msg": messages})
         else:
             # history update
             self.dialog_manager.add("user", text)
 
             # wait for worker
             messages = self.dialog_manager.build()
-            self.llm_queue.put({"type": "chat", "msg": messages})
+            self.llm_queue.put({"type": MSG_TYPE_CHAT, "msg": messages})
 
     def on_llm_emotion(self, emotion):
         self.pet.pet_emotion_change(emotion)
@@ -359,6 +417,10 @@ class MainWindow(QMainWindow):
         self.chat_view.scrollToBottom()
 
     def on_llm_sentence(self, sentence):
+        # keep TTS in silence when listening to media speaker.
+        if self.media_asr_worker:
+            self.pet.osd_on_text(sentence)
+            return
         self.tts_queue.put(sentence)
 
     def on_llm_reply(self, reply_type, reply_text):
@@ -386,7 +448,7 @@ class MainWindow(QMainWindow):
         history_content = self.dialog_manager.build_to_summarize()
         if user_status:
             history_content = f"{history_content}\n\n{user_status}"
-        self.llm_queue.put({"type": "summarize", "msg": history_content})
+        self.llm_queue.put({"type": MSG_TYPE_SUMMARY, "msg": history_content})
 
     def on_summary_done(self, new_summary: str):
         print(f"Memory Update:\n{new_summary}")
@@ -396,13 +458,21 @@ class MainWindow(QMainWindow):
 
         self.pet.pet_on_summary_finish()
         self.set_ui_busy(False)
+    
+    def append_llm_loading_msg(self):
+        self.model.add_message("Alice thinking...", False, 'loading', self._source_code)
+        self.chat_view.scrollToBottom()
+        self.thinking_index = self.model.rowCount() - 1
 
     def set_ui_busy(self, busy: bool):
-        self._llm_busy = busy
+        # busy in media listening
+        if self.media_asr_worker and not busy:
+            return
 
+        self._llm_busy = busy
         self.input_edit.toggle_send_enabled(not busy)
         self.send_btn.setEnabled(not busy)
-    
+
     # tts to subtitle
     def on_tts_sentence(self, text: str):
         self.pet.osd_on_text(text)
@@ -434,7 +504,10 @@ class MainWindow(QMainWindow):
             e.ignore()
         else:
             self.moniter.stop()
+
             self.stop_stt()
+            self.stop_media_asr()
+
             self.llm_worker.stop()
             self.tts_worker.stop()
             self.play_worker.stop()
@@ -444,13 +517,13 @@ class MainWindow(QMainWindow):
             QApplication.quit()
 
     def show_main_from_tray(self):
-        self.pet.hide_system()
+        self.pet.hide_pet_mode()
         self.showNormal()
         self.activateWindow()
 
     def show_pet_mode(self):
         self.hide()
-        self.pet.show_system()
+        self.pet.show_pet_mode()
 
     def quit_from_tray(self):
         self._actually_quit = True

@@ -1,23 +1,24 @@
 from PySide6.QtCore import QObject
+from PySide6.QtWidgets import QWidget
 
 from ui.osd_subtitle import OSDHandleWindow, OSDTextWindow
 from ui.pet_widget import DesktopPet
 
 class PetSystemManager(QObject):
-    def __init__(self):
+    def __init__(self, parent: QWidget = None):
         super().__init__()
 
-        self.pet = DesktopPet()
-        self.osd = OSDTextWindow()
-        self.osd_handle = OSDHandleWindow(parent=self.osd)
-        self.hide_system()
+        self.pet = DesktopPet(parent)
+        self.osd = OSDTextWindow(parent)
+        self.osd_handle = OSDHandleWindow(self.osd, parent)
+        self.hide_pet_mode()
 
-    def show_system(self):
+    def show_pet_mode(self):
         self.pet.show()
         self.osd.show()
         self.osd_handle.show()
 
-    def hide_system(self):
+    def hide_pet_mode(self):
         self.pet.hide()
         self.osd.hide()
         self.osd_handle.hide()

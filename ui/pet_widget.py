@@ -14,8 +14,8 @@ EMOTIONS = {
 }
 
 class DesktopPet(QWidget):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent: QWidget = None):
+        super().__init__(parent)
 
         # FramelessWindowHint: 剥离操作系统的窗口边框（标题栏等）
         # WindowStaysOnTopHint: 永远置顶
