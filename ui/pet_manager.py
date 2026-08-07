@@ -9,8 +9,8 @@ class PetSystemManager(QObject):
         super().__init__()
 
         self.pet = DesktopPet(parent)
-        self.osd = OSDTextWindow(parent)
-        self.osd_handle = OSDHandleWindow(self.osd, parent)
+        self.osd = OSDTextWindow(self.pet)
+        self.osd_handle = OSDHandleWindow(self.osd, self.pet)
         self.hide_pet_mode()
 
     def show_pet_mode(self):
