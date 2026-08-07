@@ -8,12 +8,12 @@ VITS_MODEL_PATH = "./model/tts-model/vits-piper-en_US-amy-medium"
 _POISON_PILL = object()
 
 class VitsTTSWorker(QThread):
-    tts_audio_signal = Signal(np.ndarray)
     tts_sentence_signal = Signal(str)
 
-    def __init__(self, tts_queue: queue.Queue, tts_cpu: int = 2, **kwargs,):
+    def __init__(self, tts_queue: queue.Queue, play_queue: queue.Queue, tts_cpu: int = 2, **kwargs,):
         super().__init__()
         self.tts_queue = tts_queue
+        self.play_queue = play_queue
 
         config = sherpa_onnx.OfflineTtsConfig(
             model=sherpa_onnx.OfflineTtsModelConfig(
@@ -60,7 +60,7 @@ class VitsTTSWorker(QThread):
         self.tts_sentence_signal.emit(text)
 
         if audio_generated and len(audio_generated.samples) > 0:
-            self.tts_audio_signal.emit(audio_generated.samples)
+            self.play_queue.put(audio_generated.samples)
 
     def stop(self):
         self.tts_queue.put(_POISON_PILL)

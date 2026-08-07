@@ -4,17 +4,17 @@ import numpy as np
 
 from PySide6.QtCore import QThread, Signal
 
-from core.pcm_utils import calculate_tts_volume_level, calculate_volume_level
+from core.pcm_utils import calculate_volume_level
 
 _POISON_PILL = object()
 
 class TTSPlayWorker(QThread):
     volume_signal = Signal(float)
-    
-    def __init__(self, sample_rate: int = 44100):
+
+    def __init__(self, play_queue: queue.Queue, sample_rate: int = 44100):
         super().__init__()
+        self.play_queue = play_queue
         self.sample_rate = sample_rate
-        self.play_queue = queue.Queue()
 
     def run(self):
         # 100ms
@@ -55,9 +55,6 @@ class TTSPlayWorker(QThread):
             except Exception as e:
                 print(f"[PlayWorker]Audio Exception: {e}")
                 continue
-
-    def put_audio(self, audio_data):
-        self.play_queue.put(audio_data)
 
     def stop(self):
         self.play_queue.put(_POISON_PILL)

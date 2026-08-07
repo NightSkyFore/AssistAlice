@@ -10,12 +10,12 @@ MELO_MODEL_PATH = "./model/tts-model/vits-melo-tts-zh_en"
 _POISON_PILL = object()
 
 class MeloTTSWorker(QThread):
-    tts_audio_signal = Signal(np.ndarray)
     tts_sentence_signal = Signal(str)
 
-    def __init__(self, tts_queue: queue.Queue, tts_cpu: int = 4, **kwargs,):
+    def __init__(self, tts_queue: queue.Queue, play_queue: queue.Queue, tts_cpu: int = 4, **kwargs,):
         super().__init__()
         self.tts_queue = tts_queue
+        self.play_queue = play_queue
 
         rule_fsts_string = f"{MELO_MODEL_PATH}/date.fst,{MELO_MODEL_PATH}/number.fst,{MELO_MODEL_PATH}/new_heteronym.fst,{MELO_MODEL_PATH}/phone.fst"
 
@@ -66,7 +66,7 @@ class MeloTTSWorker(QThread):
         self.tts_sentence_signal.emit(text)
 
         if audio_generated and len(audio_generated.samples) > 0:
-            self.tts_audio_signal.emit(audio_generated.samples)
+            self.play_queue.put(audio_generated.samples)
 
     def stop(self):
         self.tts_queue.put(_POISON_PILL)

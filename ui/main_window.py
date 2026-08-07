@@ -61,6 +61,7 @@ class MainWindow(QMainWindow):
 
         self.llm_queue = queue.Queue()
         self.tts_queue = queue.Queue()
+        self.play_queue = queue.Queue()
 
         # core 
         self.dialog_manager = DialogManager(**custom_config)
@@ -80,8 +81,7 @@ class MainWindow(QMainWindow):
 
         self.tts_worker = self.init_tts(**custom_config)
         self.tts_worker.tts_sentence_signal.connect(self.on_tts_sentence)
-        self.play_worker = TTSPlayWorker(self.tts_worker.sample_rate)
-        self.tts_worker.tts_audio_signal.connect(self.play_worker.put_audio)
+        self.play_worker = TTSPlayWorker(self.play_queue, self.tts_worker.sample_rate)
         self.play_worker.volume_signal.connect(self.wave.set_amplitude)
         self.tts_worker.start()
         self.play_worker.start()
@@ -352,13 +352,13 @@ class MainWindow(QMainWindow):
             self.llm_queue.put({"type": MSG_TYPE_SUBTITLE, "msg": messages})
 
     # tts initial
-    def init_tts(self, lang: str = "zh_mix", tts_cpu: int = 4, **kwargs,):
+    def init_tts(self, lang: str = "en", tts_cpu: int = 4, **kwargs,):
         if lang == "en":
-            return VitsTTSWorker(self.tts_queue, tts_cpu)
+            return VitsTTSWorker(self.tts_queue, self.play_queue, tts_cpu)
         elif lang == "ja":
-            return TonicTTSWorker(self.tts_queue, tts_cpu)
+            return TonicTTSWorker(self.tts_queue, self.play_queue, tts_cpu)
         else:
-            return MeloTTSWorker(self.tts_queue, tts_cpu)
+            return MeloTTSWorker(self.tts_queue, self.play_queue, tts_cpu)
 
     # llm chat event
     def first_greeting(self):

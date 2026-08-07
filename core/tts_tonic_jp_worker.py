@@ -8,12 +8,12 @@ TONIC_MODEL_PATH = "./model/tts-model/sherpa-onnx-supertonic-3-tts-int8-2026-05-
 _POISON_PILL = object()
 
 class TonicTTSWorker(QThread):
-    tts_audio_signal = Signal(np.ndarray)
     tts_sentence_signal = Signal(str)
 
-    def __init__(self, tts_queue: queue.Queue, tts_cpu: int = 3, **kwargs,):
+    def __init__(self, tts_queue: queue.Queue, play_queue: queue.Queue, tts_cpu: int = 3, **kwargs,):
         super().__init__()
         self.tts_queue = tts_queue
+        self.play_queue = play_queue
 
         config = sherpa_onnx.OfflineTtsConfig(
             model=sherpa_onnx.OfflineTtsModelConfig(
@@ -43,7 +43,7 @@ class TonicTTSWorker(QThread):
         self.gen_config.speed = 1.0
         self.gen_config.extra["lang"] = "ja"
 
-        print(f"[TTSWorker]VITS-en ready with {tts_cpu} CPUs...")
+        print(f"[TTSWorker]SuperTonic ready with {tts_cpu} CPUs...")
 
     def run(self):
         while True:
@@ -70,7 +70,7 @@ class TonicTTSWorker(QThread):
         self.tts_sentence_signal.emit(text)
 
         if audio_generated and len(audio_generated.samples) > 0:
-            self.tts_audio_signal.emit(audio_generated.samples)
+            self.play_queue.put(audio_generated.samples)
 
     def stop(self):
         self.tts_queue.put(_POISON_PILL)
