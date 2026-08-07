@@ -115,6 +115,7 @@ CRITICAL DIRECTIVES FOR PROPER NOUNS:
 - DO NOT translate proper nouns, brand/product names, technical terms, acronyms, or personal names.
     e.g., keep "Linux", "CUDA", "OpenAI", "Llama" in their exact original form.
 - Keep responses concise and structured. Avoid unnecessary conversational filler.
+- ONLY output plain text.
 """
 
 class AliceAI:

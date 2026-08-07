@@ -52,7 +52,7 @@ Answer strictly in {language}.
 
 [Task]
 1. [One-Sentence Summary]: State the overarching topic in a single sentence.
-2. [Key Discussion Points]: Highlight 3-5 major takeaways or key themes discussed.
+2. [Key Discussion Points]: 3-5 major takeaways or key themes discussed.
 """
 
 class DialogManager:
