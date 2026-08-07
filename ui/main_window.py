@@ -169,6 +169,10 @@ class MainWindow(QMainWindow):
                 color: #1677FF;
                 font-weight: bold;
             }
+            QPushButton:disabled {
+                background-color: #FFFFFF;
+                color: grey;
+            }
         """
         self.mic_btn.setStyleSheet(button_style)
         self.assist_btn.setStyleSheet(button_style)
@@ -322,6 +326,7 @@ class MainWindow(QMainWindow):
                 self.llm_queue.put({"type": MSG_TYPE_MEDIA, "msg": messages})
             else:
                 self.set_ui_busy(False)
+        self.tray.change_status(checked)
 
     def start_media_asr(self, stt_cpu: int = 2, **kwargs,):
         self.media_asr_worker = ASRNemotronWorker(stt_cpu=stt_cpu)
