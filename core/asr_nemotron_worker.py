@@ -90,11 +90,9 @@ class ASRNemotronWorker(QThread):
 
     def _process_audio_chunk(self, audio_chunk):
         # voice to wave
-        vol = calculate_volume_level(audio_chunk.flatten())
-        if vol > 0.003:
-            self.frame_counter += 1
-            if self.frame_counter & 3 == 0:
-                self.volume_signal.emit(vol)
+        vol = calculate_volume_level(audio_chunk.flatten(), "speaker")
+        if vol > 0.1:
+            self.volume_signal.emit(vol)
 
         self.stream.accept_waveform(self.sample_rate, audio_chunk)
 

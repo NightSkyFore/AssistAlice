@@ -4,7 +4,7 @@ import numpy as np
 
 from PySide6.QtCore import QThread, Signal
 
-from core.pcm_utils import calculate_tts_volume_level
+from core.pcm_utils import calculate_tts_volume_level, calculate_volume_level
 
 _POISON_PILL = object()
 
@@ -37,7 +37,7 @@ class TTSPlayWorker(QThread):
                                 np_chunk = audio_array[i : i + chunk_size]
                                 stream.write(np_chunk)
 
-                                vol = calculate_tts_volume_level(np_chunk)
+                                vol = calculate_volume_level(np_chunk, "tts")
                                 self.volume_signal.emit(vol)
 
                             self.volume_signal.emit(0.0)
