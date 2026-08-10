@@ -1,5 +1,4 @@
 from datetime import datetime
-from email import message
 import queue
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QHBoxLayout
@@ -88,6 +87,7 @@ class MainWindow(QMainWindow):
 
         self.moniter = InputMonitor(**custom_config)
         self.moniter.toggle_mic_signal.connect(self.mic_btn.animateClick)
+        self.moniter.toggle_media_signal.connect(self.assist_btn.animateClick)
         self.moniter.code_clipboard_signal.connect(self.on_code_clipboard)
         self.moniter.code_clipboard_quick_signal.connect(self.on_quick_code_clipboard)
         self.moniter.remind_status_signal.connect(self.on_reminding)

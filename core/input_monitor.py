@@ -1,6 +1,5 @@
 import time
 from datetime import datetime, date, time as dtime
-from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QObject, QThread, Signal
 from pynput import mouse, keyboard
 
@@ -21,6 +20,7 @@ SLEEP_MSG = {
 class InputMonitor(QThread):
     # hotkey signal
     toggle_mic_signal = Signal()
+    toggle_media_signal = Signal()
     code_clipboard_signal = Signal()
     code_clipboard_quick_signal = Signal()
     # only for TTS reminding
@@ -39,7 +39,8 @@ class InputMonitor(QThread):
         self.hotkey_handlers = [
             keyboard.HotKey(keyboard.HotKey.parse('<alt>+r'), self.on_hotkey_microphone),
             keyboard.HotKey(keyboard.HotKey.parse('<alt>+c'), self.on_hotkey_clipboard),
-            keyboard.HotKey(keyboard.HotKey.parse('<ctrl>+<alt>+r'), self.on_hotkey_clipboard_quick),
+            keyboard.HotKey(keyboard.HotKey.parse('<ctrl>+<alt>+c'), self.on_hotkey_clipboard_quick),
+            keyboard.HotKey(keyboard.HotKey.parse('<alt>+v'), self.on_hotkey_media),
         ]
 
         self.status = WorkStatus(lang)
@@ -60,6 +61,9 @@ class InputMonitor(QThread):
 
     def on_hotkey_clipboard_quick(self):
         self.code_clipboard_quick_signal.emit()
+
+    def on_hotkey_media(self):
+        self.toggle_media_signal.emit()
 
     def forward_rs_signal(self, msg):
         self.remind_status_signal.emit(msg)
