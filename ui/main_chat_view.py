@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QApplication, QListView, QMenu, QStyle, QStyledItemDelegate
-from PySide6.QtCore import QEvent, QModelIndex, QPoint, QRectF, QSize, Qt, QAbstractListModel, Signal
+from PySide6.QtCore import QEvent, QModelIndex, QRectF, QSize, Qt, QAbstractListModel, Signal
 from PySide6.QtGui import QAction, QColor, QFont, QPainter, QPainterStateGuard, QTextDocument
 
 from ui.code_popup import CodeWidget
@@ -15,9 +15,9 @@ class MessageModel(QAbstractListModel):
         'attached_code': str,
     }
     """
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, chat_data=None):
         super().__init__(parent)
-        self.messages = []  
+        self.messages = self.process_data(chat_data)
 
     def rowCount(self, parent=QModelIndex()):
         return len(self.messages)
@@ -56,6 +56,31 @@ class MessageModel(QAbstractListModel):
         reply_text += token
         self.messages[i]['text'] = reply_text
 
+    def prepend_history(self, older_data: list):
+        if not older_data:
+            return
+
+        older_messages = self.process_data(older_data)
+        self.beginInsertRows(QModelIndex(), 0, len(older_messages) - 1)
+        self.messages = older_messages + self.messages
+        self.endInsertRows()
+
+    def append_history(self, new_data: list):
+        if not new_data:
+            return
+
+        new_messages = self.process_data(new_data)
+        self.beginInsertRows(QModelIndex(), len(self.messages), len(self.messages))
+        self.messages += new_messages 
+        self.endInsertRows()
+
+    def process_data(self, chat_data: list):
+        if not chat_data:
+            return []
+        else:
+            messages = [{"text": item["text"], "is_user": bool(item["role"] == "user"), "msg_type": "normal", "attached_code": item["code"]} for item in chat_data]
+        return messages
+
 class ChatDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -67,17 +92,6 @@ class ChatDelegate(QStyledItemDelegate):
         self.radius = 12
 
         self.code_popup = CodeWidget(parent)
-
-    def _set_text_document(self, option, font, text):
-        # 准备文本渲染器（处理换行）
-        doc = QTextDocument()
-        doc.setDefaultFont(font)
-        doc.setPlainText(text)
-
-        # 限制文本最大宽度
-        max_width = option.rect.width() - self.margin - (self.padding * 4)
-        doc.setTextWidth(max_width)
-        return doc
 
     def paint(self, painter: QPainter, option, index):
         painter.save()
@@ -153,6 +167,20 @@ class ChatDelegate(QStyledItemDelegate):
         else:
             item_height = doc.size().height() + (self.padding + self.bubble_margin) * 2
         return QSize(option.rect.width(), item_height)
+
+    def _set_text_document(self, option, font, text):
+        # 准备文本渲染器（处理换行）
+        doc = QTextDocument()
+        doc.setDefaultFont(font)
+        if "```" in text:
+            doc.setMarkdown(text)
+        else:
+            doc.setPlainText(text)
+
+        # 限制文本最大宽度
+        max_width = option.rect.width() - self.margin - (self.padding * 4)
+        doc.setTextWidth(max_width)
+        return doc
 
     def editorEvent(self, event, model, option, index):
         if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:

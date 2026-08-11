@@ -20,6 +20,7 @@ from core.tts_play_worker import TTSPlayWorker
 from core.tts_tonic_jp_worker import TonicTTSWorker
 from core.tts_vits_en_worker import VitsTTSWorker
 from ui.code_popup import CodeWidget
+from ui.history_window import HistoryDialog
 from ui.main_ai_show import AIShow
 from ui.main_chat_input import ChatInputArea
 from ui.main_chat_view import ChatDelegate, ChatListView, MessageModel
@@ -150,6 +151,11 @@ class MainWindow(QMainWindow):
         self.code_btn.setFixedWidth(100)
         self.code_btn.clicked.connect(self.toggle_code_popup)
 
+        self.hist_btn = QPushButton("📒 Hist")
+        self.hist_btn.setFixedHeight(45)
+        self.hist_btn.setFixedWidth(100)
+        self.hist_btn.clicked.connect(self.toggle_history_window)
+
         button_style = """
             QPushButton {
                 background-color: #FFFFFF;
@@ -177,6 +183,7 @@ class MainWindow(QMainWindow):
         self.mic_btn.setStyleSheet(button_style)
         self.assist_btn.setStyleSheet(button_style)
         self.code_btn.setStyleSheet(button_style)
+        self.hist_btn.setStyleSheet(button_style)
 
         input_tool_layout = QHBoxLayout()
         input_tool_layout.addWidget(self.mic_btn)
@@ -233,6 +240,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(right_layout, 2)
 
         self.code_popup = CodeWidget(self)
+        self.hist_win = HistoryDialog(self)
 
     # microphone event
     def toggle_microphone(self, checked):
@@ -355,6 +363,12 @@ class MainWindow(QMainWindow):
             self.append_llm_loading_msg()
             messages = self.dialog_manager.build_media_subtitle_summarize()
             self.llm_queue.put({"type": MSG_TYPE_SUBTITLE, "msg": messages})
+
+    # history
+    def toggle_history_window(self):
+        self.hist_win.refresh_to_latest()
+        self.hist_win.show()
+        self.hist_win.activateWindow()
 
     # tts initial
     def init_tts(self, lang: str = "en", tts_cpu: int = 4, **kwargs,):
