@@ -189,6 +189,7 @@ class MainWindow(QMainWindow):
         input_tool_layout.addWidget(self.mic_btn)
         input_tool_layout.addWidget(self.assist_btn)
         input_tool_layout.addWidget(self.code_btn)
+        input_tool_layout.addWidget(self.hist_btn)
         input_tool_layout.addStretch(1)
 
         # 输入框
