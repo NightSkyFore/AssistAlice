@@ -1,4 +1,14 @@
 .vscode
 __pycache__
 */__pycache__
-
+config
+data
+driver/*
+!driver/README.md
+model/llm-model/*
+!model/llm-model/README.md
+model/stt-model/*
+!model/stt-model/README.md
+model/tts-model/*
+!model/tts-model/README.md
+tests_extra
