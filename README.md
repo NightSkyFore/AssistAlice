@@ -17,6 +17,8 @@ Base on:
 
 PySide6 for application UI.
 
+![screen](assets/Screenshot_20260813_184801.png)
+
 ### Installation
 
 Test on: Python 3.11
@@ -220,3 +222,7 @@ Total: about 3.4GB
 - Alt+C: 从剪切板获取代码进行提问（使用前先用Ctrl+C复制代码）
 - Ctrl+Alt+C: 从剪切板获取代码并快捷提问（LLM自主检视）
 - Alt+V: 同步视听辅助。
+
+## License
+
+This project is licensed under the terms of the GPLv3 license.
