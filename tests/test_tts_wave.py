@@ -22,19 +22,19 @@ class TestWindow(QWidget):
         layout.addWidget(self.send_btn)
 
         self.tts_queue = queue.Queue()
-        self.tts_worker = MeloTTSWorker(self.tts_queue)
-        self.play_worker = TTSPlayWorker()
-        self.tts_worker.tts_audio_signal.connect(self.play_worker.put_audio)
+        self.play_queue = queue.Queue()
+        self.tts_worker = MeloTTSWorker(self.tts_queue, self.play_queue)
+        self.play_worker = TTSPlayWorker(self.play_queue)
         self.play_worker.volume_signal.connect(self.wave.set_amplitude)
         self.tts_worker.start()
         self.play_worker.start()
-    
+
     def on_text_send(self):
         text = self.input.toPlainText().strip()
         if text:
             self.tts_queue.put(text)
         self.input.clear()
-    
+
     def closeEvent(self, event):
         self.tts_worker.stop()
         self.play_worker.stop()
