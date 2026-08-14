@@ -77,6 +77,10 @@ Test on: Python 3.11
 
 ### Configuration
 
+You can customize another character setting in [config/system_prompt.txt].
+
+Besides, there are options that you can add it to [config/setting.json].
+
 optional:
 - user_nick
 - lang: en/ja/zh/zh_mix
@@ -194,7 +198,11 @@ Total: about 3.4GB
 
 4. 然后就可以在终端运行`python main.py`，或另外创建一个快捷方式来启动。
 
-### 配置文件config/setting.json
+### 配置文件
+
+你可以通过在`config/system_prompt.txt`自定义系统级提示词来设定另外一个AI人设。
+
+另外，以下的配置项可以按需任意添加一个或多个到`config/setting.json`中。
 
 可选配置项:
 - user_nick: 用户名
