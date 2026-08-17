@@ -5,6 +5,7 @@ PySide6_Essentials
 sherpa-onnx >= 1.13.3
 selenium >= 4.41.0
 bs4
+num2words
 requests
 sounddevice
 soundcard
