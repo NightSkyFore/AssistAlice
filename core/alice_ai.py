@@ -142,7 +142,6 @@ class AliceAI:
             n_threads=self.n_threads,
             n_threads_batch=self.n_threads_batch,
             flash_attn=True,
-            chat_format="llama-3",
             type_k=GGML_TYPE_Q8_0,
             type_v=GGML_TYPE_Q8_0,
             verbose=False
