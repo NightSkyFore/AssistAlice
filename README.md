@@ -1,5 +1,7 @@
 # AssistAlice
 
+[中文](#中文)
+
 AI agent as desktop application running in low physical resource.
 
 Supports:
@@ -59,6 +61,11 @@ Test on: Python 3.11
     - vulkan (recommended for AMD APU)
         ```
         CMAKE_ARGS="-DGGML_VULKAN=on" pip install llama-cpp-python
+
+        or Pre-built Wheel:
+
+        pip install llama-cpp-python \
+        --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/vulkan
         ```
 
     > Note: if in Linux, make sure PySide6 version is the same with your system package.
@@ -90,7 +97,7 @@ optional:
 - n_gpu_layer: Offload model to GPU. Default not set.
 - stt_cpu: CPU threads used for voice ASR. Default to be 2 if not set.
 - tts_cpu: CPU threads used for TTS. Default not set.
-- work_time: device monitor for work. Default to be 9:30 if not set.
+- work_time: device monitor for work. Default to be 9:00 if not set.
 - sleep_time: device monitor for sleep reminding. Default to be 23:30 if not set.
 
 ### Hotkey
@@ -213,7 +220,7 @@ Total: about 3.4GB
 - n_gpu_layer: 装载到GPU的层数，0为不使用GPU，-1为全部。默认不配置。APU机器GPU和CPU通过vulkan共享物理内存，只要内存够大，可无脑设置-1。
 - stt_cpu: 声音识别的线程数，如果不配置则默认为2。
 - tts_cpu: TTS语音的线程数，默认不配置。
-- work_time: 输入设备监控的工作时间，如果不配置则默认9:30。
+- work_time: 输入设备监控的工作时间，如果不配置则默认9:00。
 - sleep_time: 输入设备监控的睡眠提醒时间，如果不配置则默认23:30。
 
 ### 快捷键
