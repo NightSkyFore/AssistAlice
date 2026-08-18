@@ -35,7 +35,7 @@ class InputMonitor(QThread):
         # device input count
         self.key_count = 0
         self.mouse_move_dist = 0
-        
+
         self.hotkey_handlers = [
             keyboard.HotKey(keyboard.HotKey.parse('<alt>+r'), self.on_hotkey_microphone),
             keyboard.HotKey(keyboard.HotKey.parse('<alt>+c'), self.on_hotkey_clipboard),
@@ -46,7 +46,7 @@ class InputMonitor(QThread):
         self.status = WorkStatus(lang)
         self.status.rs_internal_signal.connect(self.forward_rs_signal)
         self.status.ws_internal_signal.connect(self.forward_ws_signal)
-        
+
         self.k_listener = None
         self.m_listener = None
 
@@ -94,7 +94,7 @@ class InputMonitor(QThread):
     def run(self):
         self.k_listener = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)
         self.m_listener = mouse.Listener(on_move=self.on_move)
-        
+
         self.k_listener.start()
         self.m_listener.start()
 
@@ -112,13 +112,13 @@ class InputMonitor(QThread):
                         self.status.active()
                     active_step = 0
                 time.sleep(1)
-            
+
             cur_datetime = datetime.now()
             self.status.check_too_late(cur_datetime.time(), self.work_time, self.sleep_time)
             self.status.check_cross_day(cur_datetime.date())
-            
-            if self.key_count > 40:
-                if self.mouse_move_dist < 500:
+
+            if self.key_count > 20:
+                if self.mouse_move_dist < 100:
                     self.status.coding()
                 else:
                     self.status.gaming()
@@ -126,7 +126,7 @@ class InputMonitor(QThread):
                 self.status.browsing()
             else:
                 self.status.idle()
-            
+
             self.key_count = 0
             self.mouse_move_dist = 0
 
@@ -167,7 +167,7 @@ class WorkStatus(QObject):
         self.stay_time = 0
         # alarm
         self.night_alarmed = False
-    
+
     def idle(self):
         self.stay_time += 1
         if self.status == "Leaving":
@@ -196,7 +196,7 @@ class WorkStatus(QObject):
         self.browsing_time += 1
         self.stay_time = 0
         self.status = "Browsing"
- 
+
     def gaming(self):
         self.browsing_time += 1
         self.stay_time = 0
