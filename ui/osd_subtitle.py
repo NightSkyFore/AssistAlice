@@ -14,7 +14,8 @@ class OSDTextWindow(QWidget):
             Qt.FramelessWindowHint |
             Qt.WindowStaysOnTopHint |
             Qt.Tool |
-            Qt.WindowDoesNotAcceptFocus
+            Qt.WindowDoesNotAcceptFocus |
+            Qt.WindowTransparentForInput
         )
         self.setAttribute(Qt.WA_TranslucentBackground, True)
 
