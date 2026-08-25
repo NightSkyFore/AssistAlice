@@ -135,7 +135,7 @@ class OSDTextWindow(QWidget):
         self.label.change_font_size(upscale)
 
 class OSDHandleWindow(QWidget):
-    def __init__(self, target: QWidget, parent: QWidget = None):
+    def __init__(self, target: OSDTextWindow, parent: QWidget = None):
         super().__init__(parent)
         self.target_window = target
 
@@ -221,6 +221,7 @@ class OSDHandleWindow(QWidget):
         self.target_window.enable_preview()
 
     def leaveEvent(self, event):
+        self._trigger_leave()
         return super().leaveEvent(event)
 
     def _poll_mouse_position(self):
