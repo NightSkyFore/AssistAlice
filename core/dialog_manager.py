@@ -37,7 +37,7 @@ Based on the previous context, process the current subtitle chunk and answer str
 {subtitle}
 
 ### Task
-Summarize the core idea in several concise bullet points.
+Summarize the core idea in one or several concise bullet points.
 """
 
 MEDIA_FINAL_SUMMARY_PROMPT = """
@@ -50,7 +50,7 @@ Answer strictly in {language}.
 ### Subtitle Chunk
 {subtitle}
 
-[Task]
+### Task
 1. [One-Sentence Summary]: State the overarching topic in a single sentence.
 2. [Key Discussion Points]: 3-5 major takeaways or key themes discussed.
 """
