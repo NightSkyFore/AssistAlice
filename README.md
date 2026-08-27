@@ -120,7 +120,7 @@ proj
     - data
 ```
 
-### Workbench
+### Benchmarks
 Ryzen 5800H, use 'n_gpu_layer=-1' to offload to GPU.
 ```
 llama_perf_context_print: prompt eval time =     325.95 ms /    31 tokens (   10.51 ms per token,    95.11 tokens per second)
