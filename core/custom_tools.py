@@ -185,9 +185,9 @@ TOOL_FUNCTION = {
 }
 
 def tool_routing(content: str) -> object|str:
-    if any(key in content.upper() for key in ["搜索", "查询", "GOOGLE", "SEARCH", "QUERY"]):
+    if any(key in content.upper() for key in ["谷歌一下", "搜索", "查询", "搜一下", "查一下", "GOOGLE", "SEARCH", "QUERY", "LATEST"]):
         return "llm_function"
-    elif any(key in content.upper() for key in ["现在几点", "几点了", "今天日期", "周几", "星期几", "THE TIME", "THE DATE", "WHAT TIME IS IT"]):
+    elif any(key in content.upper() for key in ["现在几点", "几点了", "今天是几号", "周几", "星期几", "THE TIME", "THE DATE", "WHAT TIME IS IT"]):
         return get_current_time
     else:
         return None
