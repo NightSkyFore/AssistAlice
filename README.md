@@ -233,3 +233,5 @@ Total: about 3.4GB
 ## License
 
 This project is licensed under the terms of the GPLv3 license.
+
+Use icons from Font Awesome Free, available under CC BY 4.0.
