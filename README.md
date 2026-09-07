@@ -19,7 +19,7 @@ Base on:
 
 PySide6 for application UI.
 
-![screen](assets/Screenshot_20260813_184801.png)
+![screen](assets/Screenshot_20260907_182238.png)
 
 ### Installation
 
