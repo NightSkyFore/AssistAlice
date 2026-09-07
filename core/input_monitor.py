@@ -35,6 +35,8 @@ class InputMonitor(QThread):
         # device input count
         self.key_count = 0
         self.mouse_move_dist = 0
+        self.mouse_clicked = False
+        self.mouse_scrolled = False
 
         self.hotkey_handlers = [
             keyboard.HotKey(keyboard.HotKey.parse('<alt>+r'), self.on_hotkey_microphone),
@@ -91,9 +93,20 @@ class InputMonitor(QThread):
     def on_move(self, x, y):
         self.mouse_move_dist += 1
 
+    def on_click(self, x, y, button, pressed):
+        if pressed:
+            self.mouse_clicked = True
+
+    def on_scroll(self, x, y, dx, dy):
+        self.mouse_scrolled = True
+
     def run(self):
         self.k_listener = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)
-        self.m_listener = mouse.Listener(on_move=self.on_move)
+        self.m_listener = mouse.Listener(
+            on_move=self.on_move,
+            on_click=self.on_click,
+            on_scroll=self.on_scroll
+        )
 
         self.k_listener.start()
         self.m_listener.start()
@@ -118,17 +131,18 @@ class InputMonitor(QThread):
             self.status.check_cross_day(cur_datetime.date())
 
             if self.key_count > 20:
-                if self.mouse_move_dist < 100:
-                    self.status.coding()
-                else:
-                    self.status.gaming()
-            elif self.key_count > 0 or self.mouse_move_dist > 0:
+                self.status.coding()
+            elif self.mouse_move_dist > 100:
+                self.status.gaming()
+            elif self.key_count > 0 or self.mouse_move_dist > 0 or self.mouse_clicked or self.mouse_scrolled:
                 self.status.browsing()
             else:
                 self.status.idle()
 
             self.key_count = 0
             self.mouse_move_dist = 0
+            self.mouse_clicked = False
+            self.mouse_scrolled = False
 
     def stop(self):
         self.is_running = False
