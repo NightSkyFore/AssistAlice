@@ -19,7 +19,7 @@ Base on:
 
 PySide6 for application UI.
 
-![screen](assets/Screenshot_20260813_184801.png)
+![screen](assets/Screenshot_20260907_182238.png)
 
 ### Installation
 
@@ -233,3 +233,5 @@ Total: about 3.4GB
 ## License
 
 This project is licensed under the terms of the GPLv3 license.
+
+Use icons from Font Awesome Free, available under CC BY 4.0.

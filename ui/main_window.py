@@ -2,8 +2,8 @@ from datetime import datetime
 import queue
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QHBoxLayout
-from PySide6.QtGui import QFontDatabase
-from PySide6.QtCore import QPoint
+from PySide6.QtGui import QFontDatabase, QIcon
+from PySide6.QtCore import QPoint, QSize
 
 from core.alice_ai import AliceAI 
 from core.asr_nemotron_worker import ASRNemotronWorker
@@ -133,27 +133,27 @@ class MainWindow(QMainWindow):
         self.chat_view.remark_code_signal.connect(self.on_chat_view_remark)
 
         # 输入工具栏按钮
-        self.mic_btn = QPushButton("🎙️ Mic")
-        self.mic_btn.setObjectName("mic_btn")
+        icon_path = "./assets/font_awesome_icons"
+        self.mic_btn = QPushButton()
+        self.mic_btn.setIcon(QIcon(f"{icon_path}/microphone-solid.svg"))
+        self.mic_btn.setToolTip("Open/Close Microphone for Voice")
         self.mic_btn.setCheckable(True)
-        self.mic_btn.setFixedHeight(45)
-        self.mic_btn.setFixedWidth(100)
         self.mic_btn.clicked.connect(self.toggle_microphone)
 
-        self.assist_btn = QPushButton("🎬 Assist")
+        self.assist_btn = QPushButton()
+        self.assist_btn.setIcon(QIcon(f"{icon_path}/media-solid.svg"))
+        self.assist_btn.setToolTip("Start/Stop Assisting with Media")
         self.assist_btn.setCheckable(True)
-        self.assist_btn.setFixedHeight(45)
-        self.assist_btn.setFixedWidth(100)
         self.assist_btn.clicked.connect(self.toggle_media_assist)
 
-        self.code_btn = QPushButton("📎 Code")
-        self.code_btn.setFixedHeight(45)
-        self.code_btn.setFixedWidth(100)
+        self.code_btn = QPushButton()
+        self.code_btn.setIcon(QIcon(f"{icon_path}/code-solid.svg"))
+        self.code_btn.setToolTip("Show Code")
         self.code_btn.clicked.connect(self.toggle_code_popup)
 
-        self.hist_btn = QPushButton("📒 Hist")
-        self.hist_btn.setFixedHeight(45)
-        self.hist_btn.setFixedWidth(100)
+        self.hist_btn = QPushButton()
+        self.hist_btn.setIcon(QIcon(f"{icon_path}/history-solid.svg"))
+        self.hist_btn.setToolTip("Show Dialog History")
         self.hist_btn.clicked.connect(self.toggle_history_window)
 
         button_style = """
@@ -180,16 +180,13 @@ class MainWindow(QMainWindow):
                 color: grey;
             }
         """
-        self.mic_btn.setStyleSheet(button_style)
-        self.assist_btn.setStyleSheet(button_style)
-        self.code_btn.setStyleSheet(button_style)
-        self.hist_btn.setStyleSheet(button_style)
-
         input_tool_layout = QHBoxLayout()
-        input_tool_layout.addWidget(self.mic_btn)
-        input_tool_layout.addWidget(self.assist_btn)
-        input_tool_layout.addWidget(self.code_btn)
-        input_tool_layout.addWidget(self.hist_btn)
+        for btn in [self.mic_btn, self.assist_btn, self.code_btn, self.hist_btn]:
+            btn.setFixedSize(45, 45)
+            btn.setStyleSheet(button_style)
+            btn.setIconSize(QSize(24, 24))
+            input_tool_layout.addWidget(btn)
+
         input_tool_layout.addStretch(1)
 
         # 输入框
@@ -399,7 +396,7 @@ class MainWindow(QMainWindow):
     def handle_send(self, text: str):
         self._source_code = self.code_popup.get_code()
         self.code_popup.set_code("")
-        self.code_btn.setText("📎 Code")
+        self.update_code_btn_state()
 
         # ui update 
         show_text = text if text else "code analysis"
@@ -510,12 +507,22 @@ class MainWindow(QMainWindow):
         text = QApplication.clipboard().text()
         self.code_popup.set_code(text)
         line_count = len(text.split("\n"))
-        self.code_btn.setText(f"📎 Code({line_count})")
+        self.update_code_btn_state(line_count)
 
     def on_quick_code_clipboard(self):
         text = QApplication.clipboard().text()
         self.code_popup.set_code(text)
         self.handle_send("")
+
+    def update_code_btn_state(self, line_count: int = 0):
+        if line_count > 0:
+            self.code_btn.setFixedWidth(80)
+            self.code_btn.setText(str(line_count))
+            self.code_btn.setToolTip(f"Show selected {line_count} lines of code")
+        else:
+            self.code_btn.setFixedWidth(45)
+            self.code_btn.setText("")
+            self.code_btn.setToolTip(f"Show Code")
 
     # window action
     def closeEvent(self, e):
