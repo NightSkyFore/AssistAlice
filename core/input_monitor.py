@@ -1,6 +1,7 @@
-import time
+import math
 from datetime import datetime, date, time as dtime
-from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtCore import QObject, QThread, Signal, QTimer
+from PySide6.QtGui import QCursor
 from pynput import mouse, keyboard
 
 WELCOM_MSG = {
@@ -31,6 +32,9 @@ class InputMonitor(QThread):
     def __init__(self, lang: str = "en", work_time: str = "9:00", sleep_time: str = "23:30", **kwargs,):
         super().__init__()
         self.is_running = True
+
+        self.last_pos = None
+        self.minute_step = 0
 
         # device input count
         self.key_count = 0
@@ -90,9 +94,6 @@ class InputMonitor(QThread):
         except Exception as e:
             pass
 
-    def on_move(self, x, y):
-        self.mouse_move_dist += 1
-
     def on_click(self, x, y, button, pressed):
         if pressed:
             self.mouse_clicked = True
@@ -103,42 +104,70 @@ class InputMonitor(QThread):
     def run(self):
         self.k_listener = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)
         self.m_listener = mouse.Listener(
-            on_move=self.on_move,
             on_click=self.on_click,
             on_scroll=self.on_scroll
         )
-
         self.k_listener.start()
         self.m_listener.start()
 
+        self.last_pos = QCursor.pos()
+        self.mouse_timer = QTimer()
+        self.mouse_timer.setInterval(200)
+        self.mouse_timer.timeout.connect(self._efficient_mouse_move_check)
+        self.mouse_timer.start()
+
+        self.status_timer = QTimer()
+        self.status_timer.setInterval(10000)
+        self.status_timer.timeout.connect(self._work_status_check)
+        self.status_timer.start()
+
         print("[InputMonitor]Ready...")
 
-        while self.is_running:
-            # small steps for 1 min, for every 10 seconds, check if active
-            active_step = 0
-            for _ in range(60):
-                if not self.is_running:
-                    break
-                active_step += 1
-                if active_step >= 10:
-                    if self.key_count > 0 or self.mouse_move_dist > 0:
-                        self.status.active()
-                    active_step = 0
-                time.sleep(1)
+        self.exec()
 
+        if self.mouse_timer.isActive():
+            self.mouse_timer.stop()
+        if self.status_timer.isActive():
+            self.status_timer.stop()
+
+        self.k_listener.stop()
+        self.m_listener.stop()
+
+    def _efficient_mouse_move_check(self):
+        current_pos = QCursor.pos()
+        dx = current_pos.x() - self.last_pos.x()
+        dy = current_pos.y() - self.last_pos.y()
+        distance = math.hypot(dx, dy)
+        if distance > 2:
+            self.mouse_move_dist += 1
+        self.last_pos = current_pos
+
+    def _work_status_check(self):
+        if not self.is_running:
+            # quit for exec()
+            self.quit()
+            return
+
+        if self.key_count > 0 or self.mouse_move_dist > 0:
+            self.status.active()
+
+        self.minute_step += 1
+        if self.minute_step >= 6:
             cur_datetime = datetime.now()
             self.status.check_too_late(cur_datetime.time(), self.work_time, self.sleep_time)
             self.status.check_cross_day(cur_datetime.date())
 
             if self.key_count > 20:
-                self.status.coding()
-            elif self.mouse_move_dist > 100:
-                self.status.gaming()
+                if self.mouse_move_dist < 200:
+                    self.status.coding()
+                else:
+                    self.status.gaming()
             elif self.key_count > 0 or self.mouse_move_dist > 0 or self.mouse_clicked or self.mouse_scrolled:
                 self.status.browsing()
             else:
                 self.status.idle()
 
+            self.minute_step = 0
             self.key_count = 0
             self.mouse_move_dist = 0
             self.mouse_clicked = False
@@ -146,11 +175,7 @@ class InputMonitor(QThread):
 
     def stop(self):
         self.is_running = False
-
-        if self.k_listener:
-            self.k_listener.stop()
-        if self.m_listener:
-            self.m_listener.stop()
+        self.quit()
         self.wait()
 
 class WorkStatus(QObject):
