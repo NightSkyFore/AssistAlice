@@ -93,6 +93,7 @@ class MainWindow(QMainWindow):
         self.moniter.code_clipboard_quick_signal.connect(self.on_quick_code_clipboard)
         self.moniter.remind_status_signal.connect(self.on_reminding)
         self.moniter.work_status_signal.connect(self.on_daily_work_summary)
+        self.moniter.tray_status_signal.connect(self.tray.toggle_leave_status)
         self.moniter.start()
 
         self.first_greeting()
@@ -246,7 +247,7 @@ class MainWindow(QMainWindow):
             self.start_stt(**self._custom_config)
         else:
             self.stop_stt()
-        self.tray.change_status(checked)
+        self.tray.toggle_record_status(checked)
 
     def start_stt(self, lang: str = "en", stt_cpu: int = 2, **kwargs,):
         if lang == "zh_mix":
@@ -332,7 +333,7 @@ class MainWindow(QMainWindow):
                 self.llm_queue.put({"type": MSG_TYPE_MEDIA, "msg": messages})
             else:
                 self.set_ui_busy(False)
-        self.tray.change_status(checked)
+        self.tray.toggle_record_status(checked)
 
     def start_media_asr(self, stt_cpu: int = 2, **kwargs,):
         self.media_asr_worker = ASRNemotronWorker(stt_cpu=stt_cpu)

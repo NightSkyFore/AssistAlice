@@ -28,6 +28,8 @@ class InputMonitor(QThread):
     remind_status_signal = Signal(str)
     # send to LLM
     work_status_signal = Signal(str)
+    # tray icon signal
+    tray_status_signal = Signal(str)
 
     def __init__(self, lang: str = "en", work_time: str = "9:00", sleep_time: str = "23:30", **kwargs,):
         super().__init__()
@@ -52,6 +54,7 @@ class InputMonitor(QThread):
         self.status = WorkStatus(lang)
         self.status.rs_internal_signal.connect(self.forward_rs_signal)
         self.status.ws_internal_signal.connect(self.forward_ws_signal)
+        self.status.tray_internal_signal.connect(self.forward_tray_signal)
 
         self.k_listener = None
         self.m_listener = None
@@ -76,6 +79,9 @@ class InputMonitor(QThread):
 
     def forward_ws_signal(self, msg):
         self.work_status_signal.emit(f"### User's Daily Context\n{msg}")
+
+    def forward_tray_signal(self, status):
+        self.tray_status_signal.emit(status)
 
     def on_press(self, key):
         self.key_count += 1
@@ -192,6 +198,7 @@ class WorkStatus(QObject):
     """
     rs_internal_signal = Signal(str)
     ws_internal_signal = Signal(str)
+    tray_internal_signal = Signal(str)
 
     def __init__(self, lang: str = "en"):
         super().__init__()
@@ -206,40 +213,52 @@ class WorkStatus(QObject):
         self.stay_time = 0
         # alarm
         self.night_alarmed = False
+    
+    def _change_status(self, status: str):
+        prev_status = self.status
+        self.status = status
+        if prev_status in ["Idle", "Coding", "Gaming", "Browsing"]:
+            if status == "Rest" or status == "Leaving":
+                self.tray_internal_signal.emit(status.lower())
+        elif status != prev_status:
+            if status == "Rest" or status == "Leaving":
+                self.tray_internal_signal.emit(status.lower())
+            else:
+                self.tray_internal_signal.emit("normal")
 
     def idle(self):
         self.stay_time += 1
         if self.status == "Leaving":
             pass
         elif self.stay_time >= 15:
-            self.status = "Leaving"
+            self._change_status("Leaving")
             if self.night_alarmed:
                 self.night_alarmed = False
 
         elif self.stay_time >= 5 and self.status != "Rest":
-            self.status = "Rest"
+            self._change_status("Rest")
 
     def active(self):
         if self.status == "Leaving":
             cur_time = datetime.now().strftime("%H:%M:%S")
             msg = WELCOM_MSG[self.lang].format(cur_time=cur_time)
             self.rs_internal_signal.emit(msg)
-            self.status = "Idle"
+            self._change_status("Idle")
 
     def coding(self):
         self.coding_time += 1
         self.stay_time = 0
-        self.status = "Coding"
+        self._change_status("Coding")
 
     def browsing(self):
         self.browsing_time += 1
         self.stay_time = 0
-        self.status = "Browsing"
+        self._change_status("Browsing")
 
     def gaming(self):
         self.browsing_time += 1
         self.stay_time = 0
-        self.status = "Gaming"
+        self._change_status("Gaming")
 
     def check_too_late(self, cur_time: dtime, work_time: dtime, sleep_time: dtime):
         if self.time_late(cur_time, work_time, sleep_time) and not self.night_alarmed and self.status not in ["Leaving", "Rest"]:
