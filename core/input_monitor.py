@@ -1,6 +1,8 @@
-import math
 from datetime import datetime, date, time as dtime
-from PySide6.QtCore import QObject, QThread, Signal, QTimer
+import math
+import threading
+import time
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QCursor
 from pynput import mouse, keyboard
 
@@ -18,7 +20,7 @@ SLEEP_MSG = {
     "zh_mix": "{cur_time}，该去睡觉了。",
 }
 
-class InputMonitor(QThread):
+class InputSignalBridge(QObject):
     # hotkey signal
     toggle_mic_signal = Signal()
     toggle_media_signal = Signal()
@@ -31,16 +33,15 @@ class InputMonitor(QThread):
     # tray icon signal
     tray_status_signal = Signal(str)
 
-    def __init__(self, lang: str = "en", work_time: str = "9:00", sleep_time: str = "23:30", **kwargs,):
-        super().__init__()
-        self.is_running = True
-
-        self.last_pos = None
-        self.minute_step = 0
+class InputMonitor():
+    def __init__(self, signal_bridge: InputSignalBridge, lang: str = "en", work_time: str = "9:00", sleep_time: str = "23:30", **kwargs,):
+        self.bridge = signal_bridge
+        self.is_running = False
 
         # device input count
+        self.last_pos = None
         self.key_count = 0
-        self.mouse_move_dist = 0
+        self.mouse_move_count = 0
         self.mouse_clicked = False
         self.mouse_scrolled = False
 
@@ -63,25 +64,26 @@ class InputMonitor(QThread):
         self.sleep_time = datetime.strptime(sleep_time, "%H:%M").time()
 
     def on_hotkey_microphone(self):
-        self.toggle_mic_signal.emit()
+        self.bridge.toggle_mic_signal.emit()
 
     def on_hotkey_clipboard(self):
-        self.code_clipboard_signal.emit()
+        self.bridge.code_clipboard_signal.emit()
 
     def on_hotkey_clipboard_quick(self):
-        self.code_clipboard_quick_signal.emit()
+        self.bridge.code_clipboard_quick_signal.emit()
 
     def on_hotkey_media(self):
-        self.toggle_media_signal.emit()
+        self.bridge.toggle_media_signal.emit()
 
     def forward_rs_signal(self, msg):
-        self.remind_status_signal.emit(msg)
+        self.bridge.remind_status_signal.emit(msg)
 
     def forward_ws_signal(self, msg):
-        self.work_status_signal.emit(f"### User's Daily Context\n{msg}")
+        self.bridge.work_status_signal.emit(f"### User's Daily Context\n{msg}")
 
     def forward_tray_signal(self, status):
-        self.tray_status_signal.emit(status)
+        print("tray icon:", status)
+        self.bridge.tray_status_signal.emit(status)
 
     def on_press(self, key):
         self.key_count += 1
@@ -107,37 +109,62 @@ class InputMonitor(QThread):
     def on_scroll(self, x, y, dx, dy):
         self.mouse_scrolled = True
 
-    def run(self):
+    def start(self):
+        self.is_running = True
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
+
+    def _run(self):
         self.k_listener = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)
-        self.m_listener = mouse.Listener(
-            on_click=self.on_click,
-            on_scroll=self.on_scroll
-        )
+        self.m_listener = mouse.Listener(on_click=self.on_click, on_scroll=self.on_scroll)
         self.k_listener.start()
         self.m_listener.start()
 
-        self.last_pos = QCursor.pos()
-        self.mouse_timer = QTimer()
-        self.mouse_timer.setInterval(200)
-        self.mouse_timer.timeout.connect(self._efficient_mouse_move_check)
-        self.mouse_timer.start()
-
-        self.status_timer = QTimer()
-        self.status_timer.setInterval(10000)
-        self.status_timer.timeout.connect(self._work_status_check)
-        self.status_timer.start()
-
         print("[InputMonitor]Ready...")
 
-        self.exec()
+        self.last_pos = QCursor.pos()
+        active_step = 0
+        minute_step = 0
+        while self.is_running:
+            self._efficient_mouse_move_check()
 
-        if self.mouse_timer.isActive():
-            self.mouse_timer.stop()
-        if self.status_timer.isActive():
-            self.status_timer.stop()
+            # for every 10s.
+            active_step += 1
+            if active_step >= 50:
+                if self.key_count > 0 or self.mouse_move_count > 0:
+                    self.status.active()
+                active_step = 0
 
-        self.k_listener.stop()
-        self.m_listener.stop()
+            # for every minute.
+            minute_step += 1
+            if minute_step >= 300:
+                cur_datetime = datetime.now()
+                self.status.check_too_late(cur_datetime.time(), self.work_time, self.sleep_time)
+                self.status.check_cross_day(cur_datetime.date())
+
+                if self.key_count > 20:
+                    if self.mouse_move_count < 200:
+                        self.status.coding()
+                    else:
+                        self.status.gaming()
+                elif self.key_count > 0 or self.mouse_move_count > 0 or self.mouse_clicked or self.mouse_scrolled:
+                    self.status.browsing()
+                else:
+                    self.status.idle()
+
+                minute_step = 0
+                self.key_count = 0
+                self.mouse_move_count = 0
+                self.mouse_clicked = False
+                self.mouse_scrolled = False
+
+            time.sleep(0.2)
+
+        # close listener when exit.
+        if self.k_listener:
+            self.k_listener.stop()
+        if self.m_listener:
+            self.m_listener.stop()
 
     def _efficient_mouse_move_check(self):
         current_pos = QCursor.pos()
@@ -145,44 +172,12 @@ class InputMonitor(QThread):
         dy = current_pos.y() - self.last_pos.y()
         distance = math.hypot(dx, dy)
         if distance > 2:
-            self.mouse_move_dist += 1
+            self.mouse_move_count += 1
         self.last_pos = current_pos
-
-    def _work_status_check(self):
-        if not self.is_running:
-            # quit for exec()
-            self.quit()
-            return
-
-        if self.key_count > 0 or self.mouse_move_dist > 0:
-            self.status.active()
-
-        self.minute_step += 1
-        if self.minute_step >= 6:
-            cur_datetime = datetime.now()
-            self.status.check_too_late(cur_datetime.time(), self.work_time, self.sleep_time)
-            self.status.check_cross_day(cur_datetime.date())
-
-            if self.key_count > 20:
-                if self.mouse_move_dist < 200:
-                    self.status.coding()
-                else:
-                    self.status.gaming()
-            elif self.key_count > 0 or self.mouse_move_dist > 0 or self.mouse_clicked or self.mouse_scrolled:
-                self.status.browsing()
-            else:
-                self.status.idle()
-
-            self.minute_step = 0
-            self.key_count = 0
-            self.mouse_move_dist = 0
-            self.mouse_clicked = False
-            self.mouse_scrolled = False
 
     def stop(self):
         self.is_running = False
-        self.quit()
-        self.wait()
+        self.thread.join()
 
 class WorkStatus(QObject):
     """User work status change
@@ -234,7 +229,6 @@ class WorkStatus(QObject):
             self._change_status("Leaving")
             if self.night_alarmed:
                 self.night_alarmed = False
-
         elif self.stay_time >= 5 and self.status != "Rest":
             self._change_status("Rest")
 
@@ -243,6 +237,8 @@ class WorkStatus(QObject):
             cur_time = datetime.now().strftime("%H:%M:%S")
             msg = WELCOM_MSG[self.lang].format(cur_time=cur_time)
             self.rs_internal_signal.emit(msg)
+            self._change_status("Idle")
+        elif self.status == "Rest":
             self._change_status("Idle")
 
     def coding(self):

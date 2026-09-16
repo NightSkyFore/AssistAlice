@@ -8,7 +8,7 @@ from PySide6.QtCore import QPoint, QSize
 from core.alice_ai import AliceAI 
 from core.asr_nemotron_worker import ASRNemotronWorker
 from core.dialog_manager import DialogManager
-from core.input_monitor import InputMonitor
+from core.input_monitor import InputMonitor, InputSignalBridge
 from core.llm_worker import LLMWorker
 from core.stt_nemotron_worker import NemotronSTTWorker
 from core.stt_reazon_worker import ReazonSTTWorker
@@ -86,15 +86,16 @@ class MainWindow(QMainWindow):
         self.tts_worker.start()
         self.play_worker.start()
 
-        self.moniter = InputMonitor(**custom_config)
-        self.moniter.toggle_mic_signal.connect(self.mic_btn.animateClick)
-        self.moniter.toggle_media_signal.connect(self.assist_btn.animateClick)
-        self.moniter.code_clipboard_signal.connect(self.on_code_clipboard)
-        self.moniter.code_clipboard_quick_signal.connect(self.on_quick_code_clipboard)
-        self.moniter.remind_status_signal.connect(self.on_reminding)
-        self.moniter.work_status_signal.connect(self.on_daily_work_summary)
-        self.moniter.tray_status_signal.connect(self.tray.toggle_leave_status)
-        self.moniter.start()
+        input_signals = InputSignalBridge(self)
+        self.monitor = InputMonitor(input_signals, **custom_config)
+        input_signals.toggle_mic_signal.connect(self.mic_btn.animateClick)
+        input_signals.toggle_media_signal.connect(self.assist_btn.animateClick)
+        input_signals.code_clipboard_signal.connect(self.on_code_clipboard)
+        input_signals.code_clipboard_quick_signal.connect(self.on_quick_code_clipboard)
+        input_signals.remind_status_signal.connect(self.on_reminding)
+        input_signals.work_status_signal.connect(self.on_daily_work_summary)
+        input_signals.tray_status_signal.connect(self.tray.toggle_leave_status)
+        self.monitor.start()
 
         self.first_greeting()
 
@@ -531,7 +532,7 @@ class MainWindow(QMainWindow):
             self.show_pet_mode()
             e.ignore()
         else:
-            self.moniter.stop()
+            self.monitor.stop()
 
             self.stop_stt()
             self.stop_media_asr()
