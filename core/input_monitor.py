@@ -82,7 +82,6 @@ class InputMonitor():
         self.bridge.work_status_signal.emit(f"### User's Daily Context\n{msg}")
 
     def forward_tray_signal(self, status):
-        print("tray icon:", status)
         self.bridge.tray_status_signal.emit(status)
 
     def on_press(self, key):
